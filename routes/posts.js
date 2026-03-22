@@ -28,6 +28,21 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get a single post by ID
+router.get('/:postId', async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.postId).populate('user', 'username email');
+
+    if (!post) {
+      return res.status(404).json({ msg: 'Post not found' });
+    }
+
+    res.json(post);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Like a post
 router.put('/like/:id', authMiddleware, async (req, res) => {
   try {
