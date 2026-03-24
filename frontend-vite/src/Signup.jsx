@@ -4,68 +4,84 @@ function Signup() {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Signup form submitted:", { username, email, password });
+    setError("");
+    setLoading(true);
 
-    fetch("http://localhost:5000/api/auth/signup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("Signup response:", data);
-
-        if (data.message === "User created successfully") {
-          alert("Signup successful! You can now log in.");
-          // Redirect to login page
-          window.location.href = "/login";
-        } else {
-          alert(data.message || "Signup failed");
-        }
-      })
-      .catch((err) => {
-        console.error("Signup error:", err);
-        alert("Something went wrong. Please try again.");
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Signup failed");
+      } else {
+        alert("Signup successful! Please log in.");
+        window.location.href = "/login";
+      }
+    } catch (err) {
+      setError("Server error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-100">
+    <div className="flex h-screen items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200">
       <form
         onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow w-80 space-y-4"
+        className="bg-white p-8 rounded-xl shadow-lg w-96 space-y-6"
       >
-        <h2 className="text-xl font-bold">Signup</h2>
+        <h2 className="text-2xl font-bold text-center text-gray-800">Sign Up</h2>
+
         <input
           type="text"
           placeholder="Username"
-          className="border p-2 w-full"
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
         />
+
         <input
           type="email"
           placeholder="Email"
-          className="border p-2 w-full"
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
         <input
           type="password"
           placeholder="Password"
-          className="border p-2 w-full"
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+
         <button
           type="submit"
-          className="bg-green-500 text-white px-4 py-2 rounded w-full"
+          disabled={loading}
+          className="bg-green-500 hover:bg-green-600 text-white font-semibold px-4 py-2 rounded-lg w-full transition duration-200 disabled:opacity-50"
         >
-          Signup
+          {loading ? "Signing up..." : "Sign Up"}
         </button>
+
+        <p className="text-sm text-center text-gray-600">
+          Already have an account?{" "}
+          <a href="/login" className="text-green-500 hover:underline">
+            Log in
+          </a>
+        </p>
       </form>
     </div>
   );

@@ -3,64 +3,76 @@ import { useState } from "react";
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Login form submitted:", { email, password });
+    setError("");
+    setLoading(true);
 
-    fetch("http://localhost:5000/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        console.log("Login response:", data);
-
-        if (data.token) {
-          // Save token in localStorage
-          localStorage.setItem("token", data.token);
-          alert("Login successful!");
-
-          // Redirect to home page (or dashboard)
-          window.location.href = "/";
-        } else {
-          alert(data.message || "Login failed");
-        }
-      })
-      .catch((err) => {
-        console.error("Login error:", err);
-        alert("Something went wrong. Please try again.");
+    try {
+      const res = await fetch("http://localhost:5000/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.message || "Login failed");
+      } else {
+        localStorage.setItem("token", data.token);
+        window.location.href = "/";
+      }
+    } catch (err) {
+      setError("Server error. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="flex h-screen items-center justify-center bg-gray-100">
+    <div className="flex h-screen items-center justify-center bg-gradient-to-r from-gray-100 to-gray-200">
       <form
         onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow w-80 space-y-4"
+        className="bg-white p-8 rounded-xl shadow-lg w-96 space-y-6"
       >
-        <h2 className="text-xl font-bold">Login</h2>
+        <h2 className="text-2xl font-bold text-center text-gray-800">Login</h2>
+
         <input
           type="email"
           placeholder="Email"
-          className="border p-2 w-full"
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
         <input
           type="password"
           placeholder="Password"
-          className="border p-2 w-full"
+          className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
+
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+
         <button
           type="submit"
-          className="bg-blue-500 text-white px-4 py-2 rounded w-full"
+          disabled={loading}
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-2 rounded-lg w-full transition duration-200 disabled:opacity-50"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
+
+        <p className="text-sm text-center text-gray-600">
+          Don’t have an account?{" "}
+          <a href="/signup" className="text-blue-500 hover:underline">
+            Sign up
+          </a>
+        </p>
       </form>
     </div>
   );
