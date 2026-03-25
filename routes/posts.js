@@ -13,19 +13,24 @@ router.post('/create', authMiddleware, async (req, res) => {
     });
     await newPost.save();
 
-    // ✅ Populate user before sending back
-    const populatedPost = await newPost.populate('user', 'username email');
+    // Return populated post (user + comments.user)
+    const populatedPost = await Post.findById(newPost._id)
+      .populate('user', 'username profilePic')
+      .populate('comments.user', 'username profilePic');
+
     res.json(populatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
 // Get all posts
 router.get('/', async (req, res) => {
   try {
-    const posts = await Post.find().populate('user', 'username email');
+    const posts = await Post.find()
+      .sort({ createdAt: -1 })
+      .populate('user', 'username profilePic')
+      .populate('comments.user', 'username profilePic');
     res.json(posts);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -35,7 +40,9 @@ router.get('/', async (req, res) => {
 // Get a single post by ID
 router.get('/:postId', async (req, res) => {
   try {
-    const post = await Post.findById(req.params.postId).populate('user', 'username email');
+    const post = await Post.findById(req.params.postId)
+      .populate('user', 'username profilePic')
+      .populate('comments.user', 'username profilePic');
 
     if (!post) {
       return res.status(404).json({ msg: 'Post not found' });
@@ -53,7 +60,7 @@ router.put('/like/:id', authMiddleware, async (req, res) => {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-    if (post.likes.includes(req.user.id)) {
+    if (post.likes.some(like => like.toString() === req.user.id)) {
       // Already liked → remove like
       post.likes = post.likes.filter(like => like.toString() !== req.user.id);
     } else {
@@ -64,13 +71,17 @@ router.put('/like/:id', authMiddleware, async (req, res) => {
     }
 
     await post.save();
-    const updatedPost = await post.populate("user", "username email");
+
+    // Return fully populated updated post
+    const updatedPost = await Post.findById(post._id)
+      .populate('user', 'username profilePic')
+      .populate('comments.user', 'username profilePic');
+
     res.json(updatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 // Unlike a post
 router.put('/unlike/:id', authMiddleware, async (req, res) => {
@@ -78,7 +89,7 @@ router.put('/unlike/:id', authMiddleware, async (req, res) => {
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-    if (post.unlikes.includes(req.user.id)) {
+    if (post.unlikes.some(unlike => unlike.toString() === req.user.id)) {
       // Already unliked → remove unlike
       post.unlikes = post.unlikes.filter(unlike => unlike.toString() !== req.user.id);
     } else {
@@ -89,37 +100,38 @@ router.put('/unlike/:id', authMiddleware, async (req, res) => {
     }
 
     await post.save();
-    const updatedPost = await post.populate("user", "username email");
+
+    // Return fully populated updated post
+    const updatedPost = await Post.findById(post._id)
+      .populate('user', 'username profilePic')
+      .populate('comments.user', 'username profilePic');
+
     res.json(updatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-
-
 // Add a comment to a post
 router.post('/comment/:id', authMiddleware, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-    // If post not found
-    if (!post) {
-      return res.status(404).json({ msg: 'Post not found' });
-    }
-
-    // Create new comment object
     const newComment = {
       user: req.user.id,
       text: req.body.text,
       createdAt: Date.now()
     };
 
-    // Add comment to post
     post.comments.push(newComment);
     await post.save();
 
-    res.json(post.comments);
+    // Return populated comments (username + profilePic)
+    const updatedPost = await Post.findById(req.params.id)
+      .populate('comments.user', 'username profilePic');
+
+    return res.json(updatedPost.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -156,11 +168,14 @@ router.delete('/comment/:postId/:commentId', authMiddleware, async (req, res) =>
 
     await post.save();
 
-    res.json(post.comments);
+    // Return populated comments after deletion
+    const updatedPost = await Post.findById(post._id)
+      .populate('comments.user', 'username profilePic');
+
+    res.json(updatedPost.comments);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 module.exports = router;
