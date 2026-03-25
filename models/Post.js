@@ -21,6 +21,12 @@ const PostSchema = new mongoose.Schema(
         ref: 'User'
       }
     ],
+    unlikes: [   // ✅ new field
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    ],
     comments: [
       {
         user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

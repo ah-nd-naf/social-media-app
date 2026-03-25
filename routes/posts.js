@@ -12,11 +12,15 @@ router.post('/create', authMiddleware, async (req, res) => {
       image: req.body.image || ''
     });
     await newPost.save();
-    res.json(newPost);
+
+    // ✅ Populate user before sending back
+    const populatedPost = await newPost.populate('user', 'username email');
+    res.json(populatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Get all posts
 router.get('/', async (req, res) => {
@@ -47,51 +51,52 @@ router.get('/:postId', async (req, res) => {
 router.put('/like/:id', authMiddleware, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-    // If post not found
-    if (!post) {
-      return res.status(404).json({ msg: 'Post not found' });
-    }
-
-    // Check if user already liked
     if (post.likes.includes(req.user.id)) {
-      return res.status(400).json({ msg: 'Post already liked' });
+      // Already liked → remove like
+      post.likes = post.likes.filter(like => like.toString() !== req.user.id);
+    } else {
+      // Add like
+      post.likes.push(req.user.id);
+      // If user had unliked before, remove that
+      post.unlikes = post.unlikes.filter(unlike => unlike.toString() !== req.user.id);
     }
 
-    // Add user to likes array
-    post.likes.push(req.user.id);
     await post.save();
-
-    res.json(post.likes);
+    const updatedPost = await post.populate("user", "username email");
+    res.json(updatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // Unlike a post
 router.put('/unlike/:id', authMiddleware, async (req, res) => {
   try {
     const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ msg: 'Post not found' });
 
-    // If post not found
-    if (!post) {
-      return res.status(404).json({ msg: 'Post not found' });
+    if (post.unlikes.includes(req.user.id)) {
+      // Already unliked → remove unlike
+      post.unlikes = post.unlikes.filter(unlike => unlike.toString() !== req.user.id);
+    } else {
+      // Add unlike
+      post.unlikes.push(req.user.id);
+      // If user had liked before, remove that
+      post.likes = post.likes.filter(like => like.toString() !== req.user.id);
     }
 
-    // Check if user has not liked yet
-    if (!post.likes.includes(req.user.id)) {
-      return res.status(400).json({ msg: 'Post has not been liked yet' });
-    }
-
-    // Remove user from likes array
-    post.likes = post.likes.filter(like => like.toString() !== req.user.id);
     await post.save();
-
-    res.json(post.likes);
+    const updatedPost = await post.populate("user", "username email");
+    res.json(updatedPost);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 
 // Add a comment to a post
 router.post('/comment/:id', authMiddleware, async (req, res) => {
