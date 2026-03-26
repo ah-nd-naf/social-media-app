@@ -112,3 +112,61 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* Tight avatar + name layout (Facebook-like) */
+.avatar-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important; /* tight horizontal gap */
+}
+
+/* Ensure avatar images are block-level and sized */
+.avatar-row img,
+.comment-row img {
+  display: block !important; /* removes inline whitespace */
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  flex-shrink: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Smaller size for comment avatars */
+.comment-row img {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+/* Ensure name and timestamp have no default margins */
+.name-block p,
+.name-block small,
+.comment-row p,
+.comment-row small {
+  margin: 0 !important;
+  line-height: 1.05 !important;
+  padding: 0 !important;
+}
+
+/* Comment bubble text reset */
+.comment-row .comment-bubble p,
+.comment-bubble p {
+  margin: 0 !important;
+}
+
+/* Extra safety: remove any left margin on the name block */
+.avatar-row > .name-block {
+  margin-left: 0 !important;
+}
+
+/* If Tailwind utilities add ml-* on the name block, override it */
+.avatar-row > .name-block[class*="ml-"] {
+  margin-left: 0 !important;
+}
+
+/* Ensure gap is enforced even if other rules try to change it */
+.avatar-row,
+.comment-row {
+  gap: 6px !important;
+}

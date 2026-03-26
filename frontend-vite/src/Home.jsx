@@ -1,4 +1,3 @@
-// src/Home.jsx
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -9,11 +8,62 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   const navigate = useNavigate();
   const commentInputRefs = useRef({});
 
-  // Inline style fallbacks for non-Tailwind setups
+  // Strong inline fallbacks to guarantee spacing regardless of external CSS
+  const AVATAR_SIZE = 40;
+  const COMMENT_AVATAR_SIZE = 32;
+
   const styles = {
-    postAvatar: { width: 40, height: 40, borderRadius: "50%", objectFit: "cover" },
-    commentAvatar: { width: 32, height: 32, borderRadius: "50%", objectFit: "cover" },
-    profileAvatarLarge: { width: 96, height: 96, borderRadius: "50%", objectFit: "cover" },
+    postAvatar: {
+      display: "block",
+      width: AVATAR_SIZE,
+      height: AVATAR_SIZE,
+      borderRadius: "50%",
+      objectFit: "cover",
+      margin: 0,
+      padding: 0,
+      flexShrink: 0,
+    },
+    commentAvatar: {
+      display: "block",
+      width: COMMENT_AVATAR_SIZE,
+      height: COMMENT_AVATAR_SIZE,
+      borderRadius: "50%",
+      objectFit: "cover",
+      margin: 0,
+      padding: 0,
+      flexShrink: 0,
+    },
+    avatarRow: {
+      display: "flex",
+      alignItems: "center",
+      gap: 6,
+      marginBottom: 12,
+    },
+    commentRow: {
+      display: "flex",
+      alignItems: "flex-start",
+      gap: 8,
+      marginBottom: 12,
+    },
+    nameBlock: {
+      marginLeft: 0,
+      lineHeight: 1.05,
+    },
+    nameP: {
+      margin: 0,
+      lineHeight: 1.05,
+      fontWeight: 600,
+    },
+    nameSmall: {
+      margin: 0,
+      lineHeight: 1.05,
+      color: "var(--text)",
+    },
+    commentBubble: {
+      background: "var(--code-bg, #f8fafc)",
+      borderRadius: 10,
+      padding: "8px 10px",
+    },
   };
 
   const resolveImageUrl = (path) => {
@@ -23,8 +73,9 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   };
 
   useEffect(() => {
-    if (propUser) setUser(propUser);
-    else {
+    if (propUser) {
+      setUser(propUser);
+    } else {
       const token = localStorage.getItem("token");
       if (token) {
         fetch("http://localhost:5000/api/auth/me", { headers: { Authorization: `Bearer ${token}` } })
@@ -72,7 +123,11 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   };
 
   const updatePostInState = (updatedPost) => {
-    setPosts((prev) => prev.map((p) => (p._id === updatedPost._id ? { ...updatedPost, newComment: p.newComment || "", showComments: p.showComments || false } : p)));
+    setPosts((prev) =>
+      prev.map((p) =>
+        p._id === updatedPost._id ? { ...updatedPost, newComment: p.newComment || "", showComments: p.showComments || false } : p
+      )
+    );
   };
 
   const handleLike = async (postId) => {
@@ -82,7 +137,9 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       if (!res.ok) throw new Error();
       const updated = await res.json();
       updatePostInState(updated);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleUnlike = async (postId) => {
@@ -92,23 +149,27 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       if (!res.ok) throw new Error();
       const updated = await res.json();
       updatePostInState(updated);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const toggleComments = (postId) => {
-    setPosts((prev) => prev.map((p) => {
-      if (p._id === postId) {
-        const next = { ...p, showComments: !p.showComments };
-        if (!p.showComments) {
-          setTimeout(() => {
-            const ref = commentInputRefs.current[postId];
-            if (ref && ref.focus) ref.focus();
-          }, 50);
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p._id === postId) {
+          const next = { ...p, showComments: !p.showComments };
+          if (!p.showComments) {
+            setTimeout(() => {
+              const ref = commentInputRefs.current[postId];
+              if (ref && ref.focus) ref.focus();
+            }, 50);
+          }
+          return next;
         }
-        return next;
-      }
-      return p;
-    }));
+        return p;
+      })
+    );
   };
 
   const handleAddComment = async (e, postId) => {
@@ -126,8 +187,13 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       if (!res.ok) throw new Error();
       const updatedComments = await res.json();
       setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments, newComment: "", showComments: true } : p)));
-      setTimeout(() => { const ref = commentInputRefs.current[postId]; if (ref && ref.focus) ref.focus(); }, 50);
-    } catch (err) { console.error(err); }
+      setTimeout(() => {
+        const ref = commentInputRefs.current[postId];
+        if (ref && ref.focus) ref.focus();
+      }, 50);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleDeleteComment = async (postId, commentId) => {
@@ -137,7 +203,9 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       if (!res.ok) throw new Error();
       const updatedComments = await res.json();
       setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments } : p)));
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const isCommentOwner = (commentUser) => {
@@ -172,7 +240,12 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       </div>
 
       <form onSubmit={handleCreatePost} className="bg-white shadow-md rounded-lg p-4 mb-6">
-        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="What's on your mind?" className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none" />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What's on your mind?"
+          className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none"
+        />
         <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold">Share</button>
       </form>
 
@@ -185,74 +258,92 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
           return (
             <div key={post._id} className="bg-white shadow-md rounded-lg p-4 border border-gray-100">
-              <div className="flex items-start mb-3">
-                <div className="flex-shrink-0">
-                  {post.user?.profilePic ? (
-                    <img
-                      src={resolveImageUrl(post.user.profilePic)}
-                      alt={post.user.username || "avatar"}
-                      style={styles.postAvatar}
-                      className="w-10 h-10 rounded-full object-cover"
-                      onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
-                    />
-                  ) : (
-                    <div style={styles.postAvatar} className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-400 to-purple-500 flex items-center justify-center font-bold text-white text-lg">
-                      {initials(post.user?.username || (post.user?._id || "U"))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="ml-3 flex-1">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">{post.user?.username || (post.user?._id ? post.user._id.toString().slice(0, 6) : "Unknown")}</p>
-                      <small className="text-gray-500 block">{new Date(post.createdAt).toLocaleString()}</small>
-                    </div>
+              {/* Post header with forced tight spacing */}
+              <div style={styles.avatarRow}>
+                {post.user?.profilePic ? (
+                  <img
+                    src={resolveImageUrl(post.user.profilePic)}
+                    alt={post.user.username || "avatar"}
+                    style={styles.postAvatar}
+                    onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      ...styles.postAvatar,
+                      background: "linear-gradient(90deg,#60a5fa,#8b5cf6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {initials(post.user?.username || (post.user?._id || "U"))}
                   </div>
+                )}
+
+                <div style={styles.nameBlock}>
+                  <p style={styles.nameP}>{post.user?.username || (post.user?._id ? post.user._id.toString().slice(0, 6) : "Unknown")}</p>
+                  <small style={styles.nameSmall}>{new Date(post.createdAt).toLocaleString()}</small>
                 </div>
               </div>
 
+              {/* Post body */}
               <p className="text-gray-800 mb-3">{post.text}</p>
 
+              {/* Actions */}
               <div className="flex space-x-6 text-sm text-gray-600 border-t pt-2">
                 <button onClick={() => handleLike(post._id)} title={liked ? "You liked this" : "Like this post"} className={`${liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}`}>👍 Like ({post.likes?.length || 0})</button>
                 <button onClick={() => handleUnlike(post._id)} title={unliked ? "You unliked this" : "Unlike this post"} className={`${unliked ? "text-red-600 font-bold" : "hover:text-red-600"}`}>👎 Unlike ({post.unlikes?.length || 0})</button>
                 <button onClick={() => toggleComments(post._id)} className="hover:text-blue-600" title="Comment on this post">💬 Comment ({post.comments?.length || 0})</button>
               </div>
 
+              {/* Comments area (only when opened) */}
               {post.showComments && (
                 <div className="mt-4">
                   {post.comments?.length ? (
                     post.comments.map((c) => (
-                      <div key={c._id} className="flex items-start mb-3">
-                        <div className="flex-shrink-0">
-                          {c.user?.profilePic ? (
-                            <img
-                              src={resolveImageUrl(c.user.profilePic)}
-                              alt={c.user.username || "avatar"}
-                              style={styles.commentAvatar}
-                              className="w-8 h-8 rounded-full object-cover"
-                              onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
-                            />
-                          ) : (
-                            <div style={styles.commentAvatar} className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs font-bold">
-                              {initials(commenterDisplayName(c.user))}
-                            </div>
-                          )}
-                        </div>
+                      <div key={c._id} style={styles.commentRow}>
+                        {c.user?.profilePic ? (
+                          <img
+                            src={resolveImageUrl(c.user.profilePic)}
+                            alt={c.user.username || "avatar"}
+                            style={styles.commentAvatar}
+                            onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              ...styles.commentAvatar,
+                              background: "#d1d5db",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontSize: 12,
+                              fontWeight: 700,
+                            }}
+                          >
+                            {initials(commenterDisplayName(c.user))}
+                          </div>
+                        )}
 
-                        <div className="ml-3 flex-1 bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-sm"><span className="font-semibold">{commenterDisplayName(c.user)}</span></p>
-                              <small className="text-gray-500">{new Date(c.createdAt).toLocaleString()}</small>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ lineHeight: 1.05 }}>
+                              <p style={{ margin: 0, fontWeight: 600 }}>{commenterDisplayName(c.user)}</p>
+                              <small style={{ margin: 0, color: "var(--text)" }}>{new Date(c.createdAt).toLocaleString()}</small>
                             </div>
-                            {isCommentOwner(c.user) && (
-                              <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline ml-3">Delete</button>
-                            )}
+                            <div style={{ marginLeft: "auto" }}>
+                              {isCommentOwner(c.user) && <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline">Delete</button>}
+                            </div>
                           </div>
 
-                          <p className="mt-2 text-sm text-gray-800">{c.text}</p>
+                          <div style={{ marginTop: 6 }}>
+                            <div style={styles.commentBubble}>
+                              <p style={{ margin: 0 }} className="text-sm text-gray-800">{c.text}</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -260,19 +351,35 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                     <p className="text-sm text-gray-500 mb-2">No comments yet. Be the first to comment.</p>
                   )}
 
-                  <form onSubmit={(e) => handleAddComment(e, post._id)} className="flex items-center mt-2">
-                    <div className="flex-shrink-0 mr-3">
-                      {user?.profilePic ? (
-                        <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div style={styles.commentAvatar} className="w-8 h-8 rounded-full bg-gradient-to-r from-green-400 to-teal-500 flex items-center justify-center text-xs font-bold text-white">
-                          {initials(user?.username || "Me")}
-                        </div>
-                      )}
-                    </div>
+                  {/* Add comment form */}
+                  <form onSubmit={(e) => handleAddComment(e, post._id)} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {user?.profilePic ? (
+                      <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} />
+                    ) : (
+                      <div
+                        style={{
+                          ...styles.commentAvatar,
+                          background: "linear-gradient(90deg,#10b981,#06b6d4)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "#fff",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {initials(user?.username || "Me")}
+                      </div>
+                    )}
 
-                    <input ref={(el) => (commentInputRefs.current[post._id] = el)} type="text" placeholder="Write a comment..." value={post.newComment || ""} onChange={(e) => setPosts((prev) => prev.map((p) => (p._id === post._id ? { ...p, newComment: e.target.value } : p)))} className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                    <button type="submit" className="ml-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">Post</button>
+                    <input
+                      ref={(el) => (commentInputRefs.current[post._id] = el)}
+                      type="text"
+                      placeholder="Write a comment..."
+                      value={post.newComment || ""}
+                      onChange={(e) => setPosts((prev) => prev.map((p) => (p._id === post._id ? { ...p, newComment: e.target.value } : p)))}
+                      className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                    <button type="submit" className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">Post</button>
                   </form>
                 </div>
               )}
