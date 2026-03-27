@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 
@@ -8,10 +9,8 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   const navigate = useNavigate();
   const commentInputRefs = useRef({});
 
-  // Strong inline fallbacks to guarantee spacing regardless of external CSS
   const AVATAR_SIZE = 40;
   const COMMENT_AVATAR_SIZE = 32;
-
   const styles = {
     postAvatar: {
       display: "block",
@@ -87,8 +86,24 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
     fetch("http://localhost:5000/api/posts")
       .then((r) => r.json())
-      .then((data) => setPosts(data.map((p) => ({ ...p, newComment: "", showComments: false }))))
-      .catch(() => {});
+      .then((data) =>
+        setPosts(
+          (Array.isArray(data) ? data : []).map((p) => ({
+            ...p,
+            user: p.user || (p.username || p.userId ? { username: p.username, profilePic: p.profilePic, _id: p.userId || p._id } : null),
+            text: p.text ?? p.content ?? "",
+            likes: Array.isArray(p.likes) ? p.likes : [],
+            unlikes: Array.isArray(p.unlikes) ? p.unlikes : [],
+            comments: Array.isArray(p.comments) ? p.comments : [],
+            newComment: "",
+            showComments: false,
+          }))
+        )
+      )
+      .catch(() => {
+        setPosts([]);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propUser]);
 
   useEffect(() => {
@@ -107,7 +122,8 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       });
       if (!res.ok) throw new Error();
       const newPost = await res.json();
-      setPosts((prev) => [{ ...newPost, newComment: "", showComments: false }, ...prev]);
+      const poster = newPost.user || { username: newPost.username, profilePic: newPost.profilePic, _id: newPost.userId };
+      setPosts((prev) => [{ ...newPost, user: poster, newComment: "", showComments: false }, ...prev]);
       setText("");
     } catch (err) {
       console.error(err);
@@ -122,35 +138,126 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     navigate("/login");
   };
 
-  const updatePostInState = (updatedPost) => {
-    setPosts((prev) =>
-      prev.map((p) =>
-        p._id === updatedPost._id ? { ...updatedPost, newComment: p.newComment || "", showComments: p.showComments || false } : p
-      )
-    );
+  const updatePostInState = (updatedPostOrComments) => {
+    if (!updatedPostOrComments) return;
+    if (updatedPostOrComments._id) {
+      const updatedPost = {
+        ...updatedPostOrComments,
+        user: updatedPostOrComments.user || { username: updatedPostOrComments.username, profilePic: updatedPostOrComments.profilePic },
+        likes: Array.isArray(updatedPostOrComments.likes) ? updatedPostOrComments.likes : [],
+        unlikes: Array.isArray(updatedPostOrComments.unlikes) ? updatedPostOrComments.unlikes : [],
+        comments: Array.isArray(updatedPostOrComments.comments) ? updatedPostOrComments.comments : [],
+      };
+      setPosts((prev) => prev.map((p) => (p._id === updatedPost._id ? { ...p, ...updatedPost, newComment: p.newComment || "", showComments: p.showComments || false } : p)));
+    } else {
+      console.warn("updatePostInState received comments array without post id — no-op");
+    }
+  };
+
+  const sendReactionRequest = async (postId, action) => {
+    const token = localStorage.getItem("token");
+    const endpointsToTry = [
+      { method: "PUT", url: `http://localhost:5000/api/posts/${action}/${postId}` },
+      { method: "POST", url: `http://localhost:5000/api/posts/${postId}/${action}` },
+      { method: "POST", url: `http://localhost:5000/api/posts/${action}/${postId}` },
+    ];
+
+    for (const ep of endpointsToTry) {
+      try {
+        const res = await fetch(ep.url, { method: ep.method, headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) continue;
+        const data = await res.json();
+        return data;
+      } catch (err) {
+        continue;
+      }
+    }
+    throw new Error(`${action} failed on all tried endpoints`);
   };
 
   const handleLike = async (postId) => {
-    const token = localStorage.getItem("token");
+    const meId = user?._id;
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p._1d !== postId && p._id !== postId) return p;
+        const alreadyLiked = meId && p.likes?.some((id) => id.toString() === meId.toString());
+        const alreadyUnliked = meId && p.unlikes?.some((id) => id.toString() === meId.toString());
+        let likes = Array.isArray(p.likes) ? [...p.likes] : [];
+        let unlikes = Array.isArray(p.unlikes) ? [...p.unlikes] : [];
+        if (alreadyLiked) likes = likes.filter((id) => id.toString() !== meId.toString());
+        else {
+          likes.push(meId || "me");
+          if (alreadyUnliked) unlikes = unlikes.filter((id) => id.toString() !== meId.toString());
+        }
+        return { ...p, likes, unlikes };
+      })
+    );
+
     try {
-      const res = await fetch(`http://localhost:5000/api/posts/like/${postId}`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      updatePostInState(updated);
+      const updated = await sendReactionRequest(postId, "like");
+      if (updated && updated._id) {
+        updatePostInState(updated);
+      } else {
+        const res = await fetch("http://localhost:5000/api/posts");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setPosts(
+            data.map((p) => ({
+              ...p,
+              newComment: "",
+              showComments: false,
+              likes: p.likes || [],
+              unlikes: p.unlikes || [],
+              comments: p.comments || [],
+              user: p.user || { username: p.username, profilePic: p.profilePic },
+            }))
+          );
+        }
+      }
     } catch (err) {
       console.error(err);
+      fetch("http://localhost:5000/api/posts")
+        .then((r) => r.json())
+        .then((data) => setPosts(data.map((p) => ({ ...p, newComment: "", showComments: false }))))
+        .catch(() => {});
     }
   };
 
   const handleUnlike = async (postId) => {
-    const token = localStorage.getItem("token");
+    const meId = user?._id;
+    setPosts((prev) =>
+      prev.map((p) => {
+        if (p._id !== postId) return p;
+        const alreadyUnliked = meId && p.unlikes?.some((id) => id.toString() === meId.toString());
+        const alreadyLiked = meId && p.likes?.some((id) => id.toString() === meId.toString());
+        let likes = Array.isArray(p.likes) ? [...p.likes] : [];
+        let unlikes = Array.isArray(p.unlikes) ? [...p.unlikes] : [];
+        if (alreadyUnliked) unlikes = unlikes.filter((id) => id.toString() !== meId.toString());
+        else {
+          unlikes.push(meId || "me");
+          if (alreadyLiked) likes = likes.filter((id) => id.toString() !== meId.toString());
+        }
+        return { ...p, likes, unlikes };
+      })
+    );
+
     try {
-      const res = await fetch(`http://localhost:5000/api/posts/unlike/${postId}`, { method: "PUT", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) throw new Error();
-      const updated = await res.json();
-      updatePostInState(updated);
+      const updated = await sendReactionRequest(postId, "unlike");
+      if (updated && updated._id) {
+        updatePostInState(updated);
+      } else {
+        const res = await fetch("http://localhost:5000/api/posts");
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setPosts(data.map((p) => ({ ...p, newComment: "", showComments: false })));
+        }
+      }
     } catch (err) {
       console.error(err);
+      fetch("http://localhost:5000/api/posts")
+        .then((r) => r.json())
+        .then((data) => setPosts(data.map((p) => ({ ...p, newComment: "", showComments: false }))))
+        .catch(() => {});
     }
   };
 
@@ -185,8 +292,15 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         body: JSON.stringify({ text: commentText }),
       });
       if (!res.ok) throw new Error();
-      const updatedComments = await res.json();
-      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments, newComment: "", showComments: true } : p)));
+      const result = await res.json();
+      if (Array.isArray(result)) {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: result, newComment: "", showComments: true } : p)));
+      } else if (result && result._id) {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...result, newComment: "", showComments: true } : p)));
+      } else {
+        const all = await fetch("http://localhost:5000/api/posts").then((r) => r.json());
+        setPosts(all.map((p) => ({ ...p, newComment: "", showComments: false })));
+      }
       setTimeout(() => {
         const ref = commentInputRefs.current[postId];
         if (ref && ref.focus) ref.focus();
@@ -202,7 +316,14 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       const res = await fetch(`http://localhost:5000/api/posts/comment/${postId}/${commentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) throw new Error();
       const updatedComments = await res.json();
-      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments } : p)));
+      if (Array.isArray(updatedComments)) {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments } : p)));
+      } else if (updatedComments && updatedComments._id) {
+        setPosts((prev) => prev.map((p) => (p._id === postId ? updatedComments : p)));
+      } else {
+        const all = await fetch("http://localhost:5000/api/posts").then((r) => r.json());
+        setPosts(all.map((p) => ({ ...p, newComment: "", showComments: false })));
+      }
     } catch (err) {
       console.error(err);
     }
@@ -226,16 +347,28 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
   const initials = (name) => {
     if (!name) return "?";
-    return name.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+    return name
+      .toString()
+      .split(" ")
+      .map((s) => s[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
   };
 
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">{user ? `Welcome, ${user.username}!` : "Welcome"}</h1>
+        {/* Smaller, bold header so it doesn't push layout */}
+        <h1 className="text-lg font-bold">{user ? `Welcome, ${user.username}` : "Welcome"}</h1>
+
         <div className="flex items-center space-x-3">
-          <Link to="/profile" className="text-sm text-gray-700 hover:underline">Profile</Link>
-          <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">Logout</button>
+          <Link to="/profile" className="text-sm text-gray-700 hover:underline">
+            Profile
+          </Link>
+          <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">
+            Logout
+          </button>
         </div>
       </div>
 
@@ -246,26 +379,31 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
           placeholder="What's on your mind?"
           className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none"
         />
-        <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold">Share</button>
+        <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold">
+          Share
+        </button>
       </form>
 
       <h2 className="text-xl font-semibold mb-4">Recent Posts</h2>
 
       <div className="space-y-4">
         {posts.map((post) => {
-          const liked = user && post.likes?.some((id) => id.toString() === user._id.toString());
-          const unliked = user && post.unlikes?.some((id) => id.toString() === user._id.toString());
+          const liked = user && Array.isArray(post.likes) && post.likes.some((id) => id.toString() === user._id.toString());
+          const unliked = user && Array.isArray(post.unlikes) && post.unlikes.some((id) => id.toString() === user._id.toString());
 
           return (
             <div key={post._id} className="bg-white shadow-md rounded-lg p-4 border border-gray-100">
-              {/* Post header with forced tight spacing */}
+              {/* Post header */}
               <div style={styles.avatarRow}>
                 {post.user?.profilePic ? (
                   <img
                     src={resolveImageUrl(post.user.profilePic)}
                     alt={post.user.username || "avatar"}
                     style={styles.postAvatar}
-                    onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = "";
+                    }}
                   />
                 ) : (
                   <div
@@ -294,12 +432,28 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
               {/* Actions */}
               <div className="flex space-x-6 text-sm text-gray-600 border-t pt-2">
-                <button onClick={() => handleLike(post._id)} title={liked ? "You liked this" : "Like this post"} className={`${liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}`}>👍 Like ({post.likes?.length || 0})</button>
-                <button onClick={() => handleUnlike(post._id)} title={unliked ? "You unliked this" : "Unlike this post"} className={`${unliked ? "text-red-600 font-bold" : "hover:text-red-600"}`}>👎 Unlike ({post.unlikes?.length || 0})</button>
-                <button onClick={() => toggleComments(post._id)} className="hover:text-blue-600" title="Comment on this post">💬 Comment ({post.comments?.length || 0})</button>
+                <button
+                  onClick={() => handleLike(post._id)}
+                  title={liked ? "You liked this" : "Like this post"}
+                  className={`${liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}`}
+                >
+                  👍 Like ({post.likes?.length || 0})
+                </button>
+
+                <button
+                  onClick={() => handleUnlike(post._id)}
+                  title={unliked ? "You unliked this" : "Unlike this post"}
+                  className={`${unliked ? "text-red-600 font-bold" : "hover:text-red-600"}`}
+                >
+                  👎 Unlike ({post.unlikes?.length || 0})
+                </button>
+
+                <button onClick={() => toggleComments(post._id)} className="hover:text-blue-600" title="Comment on this post">
+                  💬 Comment ({post.comments?.length || 0})
+                </button>
               </div>
 
-              {/* Comments area (only when opened) */}
+              {/* Comments area */}
               {post.showComments && (
                 <div className="mt-4">
                   {post.comments?.length ? (
@@ -310,7 +464,10 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                             src={resolveImageUrl(c.user.profilePic)}
                             alt={c.user.username || "avatar"}
                             style={styles.commentAvatar}
-                            onError={(e) => { e.target.onerror = null; e.target.src = ""; }}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "";
+                            }}
                           />
                         ) : (
                           <div
@@ -334,14 +491,21 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                               <p style={{ margin: 0, fontWeight: 600 }}>{commenterDisplayName(c.user)}</p>
                               <small style={{ margin: 0, color: "var(--text)" }}>{new Date(c.createdAt).toLocaleString()}</small>
                             </div>
+
                             <div style={{ marginLeft: "auto" }}>
-                              {isCommentOwner(c.user) && <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline">Delete</button>}
+                              {isCommentOwner(c.user) && (
+                                <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline">
+                                  Delete
+                                </button>
+                              )}
                             </div>
                           </div>
 
                           <div style={{ marginTop: 6 }}>
                             <div style={styles.commentBubble}>
-                              <p style={{ margin: 0 }} className="text-sm text-gray-800">{c.text}</p>
+                              <p style={{ margin: 0 }} className="text-sm text-gray-800">
+                                {c.text}
+                              </p>
                             </div>
                           </div>
                         </div>
@@ -379,7 +543,10 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                       onChange={(e) => setPosts((prev) => prev.map((p) => (p._id === post._id ? { ...p, newComment: e.target.value } : p)))}
                       className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
                     />
-                    <button type="submit" className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">Post</button>
+
+                    <button type="submit" className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">
+                      Post
+                    </button>
                   </form>
                 </div>
               )}
