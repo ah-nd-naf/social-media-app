@@ -1,9 +1,9 @@
-// src/pages/Home.jsx
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { io } from "socket.io-client";
 
 const BACKEND_URL = "http://localhost:5000";
+const NEWS_API = `${BACKEND_URL}/api/news`;
 
 export default function Home({ user: propUser, setUser: setPropUser }) {
   const [user, setUser] = useState(propUser || null);
@@ -15,6 +15,8 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
   const AVATAR_SIZE = 40;
   const COMMENT_AVATAR_SIZE = 32;
+
+  const [news, setNews] = useState([]);
 
   const styles = {
     postAvatar: {
@@ -57,7 +59,11 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     user:
       p.user ||
       (p.username || p.userId
-        ? { username: p.username || (p.user && p.user.username), profilePic: p.profilePic, _id: p.userId || p._id }
+        ? {
+            username: p.username || (p.user && p.user.username),
+            profilePic: p.profilePic,
+            _id: p.userId || p._id,
+          }
         : null),
     text: p.text ?? p.content ?? "",
     likes: Array.isArray(p.likes) ? p.likes : [],
@@ -66,6 +72,17 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     newComment: p.newComment ?? "",
     showComments: p.showComments ?? false,
   });
+
+  // Helper: dedupe by id/_id
+  const dedupeById = (arr = []) => {
+    const map = new Map();
+    for (const item of arr || []) {
+      if (!item) continue;
+      const id = (item._id || item.id || "").toString();
+      if (id) map.set(id, item);
+    }
+    return Array.from(map.values());
+  };
 
   // Initial fetch + keep propUser in sync
   useEffect(() => {
@@ -87,10 +104,19 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         setPosts(arr.map((p) => normalizePost(p)));
       })
       .catch(() => setPosts([]));
+
+    // fetch news
+    fetch(NEWS_API)
+      .then((r) => r.json())
+      .then((data) => {
+        setNews(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setNews([]));
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propUser]);
 
-  // Socket.IO connection for real-time updates
+  // Socket.IO connection for real-time updates (register once, idempotent)
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
@@ -99,22 +125,45 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     });
 
     socketRef.current.on("newPost", (post) => {
-      setPosts((prev) => [normalizePost(post), ...prev]);
+      setPosts((prev) => {
+        if (prev.some((p) => p._id === post._id)) return prev;
+        return [normalizePost(post), ...prev];
+      });
     });
 
     socketRef.current.on("updatePost", (updatedPost) => {
-      setPosts((prev) => prev.map((p) => (p._id === updatedPost._id ? normalizePost({ ...p, ...updatedPost }) : p)));
+      setPosts((prev) =>
+        prev.map((p) => {
+          if (p._id !== updatedPost._id) return p;
+          // merge existing and incoming comments and dedupe by id
+          const mergedComments = dedupeById([...(p.comments || []), ...(updatedPost.comments || [])]);
+          const merged = { ...p, ...updatedPost, comments: mergedComments };
+          return normalizePost(merged);
+        })
+      );
     });
 
     return () => {
-      socketRef.current.disconnect();
+      if (socketRef.current) {
+        socketRef.current.off("connect");
+        socketRef.current.off("newPost");
+        socketRef.current.off("updatePost");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
     };
   }, []);
 
   // Helpers
   const initials = (name) => {
     if (!name) return "?";
-    return name.toString().split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+    return name
+      .toString()
+      .split(" ")
+      .map((s) => s[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
   };
 
   const commenterDisplayName = (commentUser) => {
@@ -128,14 +177,15 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   const isCommentOwner = (commentUser) => {
     if (!user) return false;
     if (!commentUser) return false;
-    if (typeof commentUser === "string") return commentUser === user._id;
-    if (commentUser._id) return commentUser._id.toString() === user._id.toString();
+    if (typeof commentUser === "string") return commentUser === user.id || commentUser === user._id;
+    if (commentUser.id) return commentUser.id.toString() === (user.id || user._id)?.toString();
+    if (commentUser._id) return commentUser._id.toString() === (user._id || user.id)?.toString();
     return false;
   };
 
   // Create post
   const handleCreatePost = async (e) => {
-    e.preventDefault();
+    e?.preventDefault?.();
     const token = localStorage.getItem("token");
     if (!text.trim()) return;
     try {
@@ -157,7 +207,8 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   // Reaction (like/unlike) with optimistic UI and reconciliation
   const sendReaction = async (postId, action) => {
     const token = localStorage.getItem("token");
-    const meId = user?._id;
+    const meId = user?.id || user?._id;
+
     // optimistic update
     setPosts((prev) =>
       prev.map((p) => {
@@ -166,6 +217,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         const alreadyUnliked = meId && p.unlikes?.some((id) => id.toString() === meId.toString());
         let likes = Array.isArray(p.likes) ? [...p.likes] : [];
         let unlikes = Array.isArray(p.unlikes) ? [...p.unlikes] : [];
+
         if (action === "like") {
           if (alreadyLiked) likes = likes.filter((id) => id.toString() !== meId.toString());
           else {
@@ -225,39 +277,34 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     }, 50);
   };
 
-  // Add comment
+  // Add comment: send to server, clear input locally, rely on socket for final UI update
   const handleAddComment = async (e, postId) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
     const post = posts.find((p) => p._id === postId);
     const commentText = (post?.newComment || "").trim();
     if (!commentText) return;
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/comment/${postId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: commentText }),
       });
-      if (!res.ok) throw new Error();
-      const result = await res.json();
-      if (Array.isArray(result)) {
-        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: result, newComment: "", showComments: true } : p)));
-      } else if (result && result._id) {
-        setPosts((prev) => prev.map((p) => (p._id === postId ? normalizePost(result) : p)));
-      } else {
-        const all = await fetch(`${BACKEND_URL}/api/posts`).then((r) => r.json());
-        setPosts((Array.isArray(all) ? all : []).map((p) => normalizePost(p)));
+
+      // Clear the input immediately; server will emit updatePost/newPost and socket handler will merge comments
+      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, newComment: "" } : p)));
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Add comment failed" }));
+        console.error("Add comment failed:", err);
       }
-      setTimeout(() => {
-        const ref = commentInputRefs.current[postId];
-        if (ref && ref.focus) ref.focus();
-      }, 50);
     } catch (err) {
-      console.error(err);
+      console.error("Add comment error:", err);
     }
   };
 
-  // Add reply to a comment
+  // Add reply: send to server, clear reply input locally, rely on socket for final UI update
   const handleAddReply = async (e, postId, commentId) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
@@ -265,28 +312,27 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     const comment = post?.comments?.find((c) => c._id === commentId);
     const replyText = (comment?.newReply || "").trim();
     if (!replyText) return;
+
     try {
       const res = await fetch(`${BACKEND_URL}/api/posts/${postId}/comment/${commentId}/reply`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: replyText }),
       });
-      if (!res.ok) throw new Error();
-      const result = await res.json();
-      if (result && result._id && Array.isArray(result.replies)) {
-        setPosts((prev) =>
-          prev.map((p) =>
-            p._id === postId ? { ...p, comments: p.comments.map((c) => (c._id === commentId ? { ...c, replies: result.replies, newReply: "" } : c)) } : p
-          )
-        );
-      } else if (result && result._id) {
-        setPosts((prev) => prev.map((p) => (p._id === result._id ? normalizePost(result) : p)));
-      } else {
-        const all = await fetch(`${BACKEND_URL}/api/posts`).then((r) => r.json());
-        setPosts((Array.isArray(all) ? all : []).map((p) => normalizePost(p)));
+
+      // Clear the reply input locally; server will emit updatePost and socket handler will merge replies
+      setPosts((prev) =>
+        prev.map((p) =>
+          p._id === postId ? { ...p, comments: p.comments.map((c) => (c._id === commentId ? { ...c, newReply: "" } : c)) } : p
+        )
+      );
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Add reply failed" }));
+        console.error("Add reply failed:", err);
       }
     } catch (err) {
-      console.error(err);
+      console.error("Add reply error:", err);
     }
   };
 
@@ -294,7 +340,10 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   const handleDeleteComment = async (postId, commentId) => {
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/comment/${postId}/${commentId}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${BACKEND_URL}/api/posts/comment/${postId}/${commentId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (!res.ok) throw new Error();
       const updatedComments = await res.json();
       if (Array.isArray(updatedComments)) {
@@ -352,8 +401,32 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         </div>
       </div>
 
+      {/* Latest News */}
+      <section className="mb-6">
+        <h2 className="text-xl font-semibold mb-3">Latest News</h2>
+        <div className="space-y-3">
+          {news.length === 0 ? (
+            <p className="text-sm text-gray-500">Loading news...</p>
+          ) : (
+            news.map((n, i) => (
+              <div key={i} className="bg-gray-50 p-3 rounded-lg shadow-sm">
+                <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
+                  {n.title}
+                </a>
+                <div className="text-xs text-gray-500 mt-1">{n.pubDate ? new Date(n.pubDate).toLocaleString() : ""}</div>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
+
       <form onSubmit={handleCreatePost} className="bg-white shadow-md rounded-lg p-4 mb-6">
-        <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="What's on your mind?" className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none" />
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="What's on your mind?"
+          className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none"
+        />
         <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold">
           Share
         </button>
@@ -363,39 +436,57 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
       <div className="space-y-4">
         {posts.map((post) => {
-          const liked = user && Array.isArray(post.likes) && post.likes.some((id) => id.toString() === user._id?.toString());
-          const unliked = user && Array.isArray(post.unlikes) && post.unlikes.some((id) => id.toString() === user._id?.toString());
+          const liked = user && Array.isArray(post.likes) && post.likes.some((id) => id.toString() === (user._id || user.id)?.toString());
+          const unliked = user && Array.isArray(post.unlikes) && post.unlikes.some((id) => id.toString() === (user._id || user.id)?.toString());
 
           return (
             <div key={post._id} className="bg-white shadow-md rounded-lg p-4 border border-gray-100">
               <div style={styles.avatarRow}>
                 {post.user?.profilePic ? (
-                  <img src={resolveImageUrl(post.user.profilePic)} alt={post.user.username || "avatar"} style={styles.postAvatar} onError={(e) => { e.target.onerror = null; e.target.src = ""; }} />
+                  <img
+                    src={resolveImageUrl(post.user.profilePic)}
+                    alt={post.user.username || "avatar"}
+                    style={styles.postAvatar}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = "";
+                    }}
+                  />
                 ) : (
-                  <div style={{ ...styles.postAvatar, background: "linear-gradient(90deg,#60a5fa,#8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
-                    {initials(post.user?.username || (post.user?._id || "U"))}
+                  <div
+                    style={{
+                      ...styles.postAvatar,
+                      background: "linear-gradient(90deg, #60a5fa, #8b5cf6)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#fff",
+                      fontWeight: 700,
+                    }}
+                  >
+                    {initials(post.user?.username || post.user?._id || "U")}
                   </div>
                 )}
 
                 <div style={styles.nameBlock}>
                   <p style={styles.nameP}>{post.user?.username || (post.user?._id ? post.user._id.toString().slice(0, 6) : "Unknown")}</p>
-                  <small style={styles.nameSmall}>{new Date(post.createdAt).toLocaleString()}</small>
+                  <small style={styles.nameSmall}>{post.createdAt ? new Date(post.createdAt).toLocaleString() : ""}</small>
                 </div>
               </div>
 
               <p className="text-gray-800 mb-3">{post.text}</p>
 
               <div className="flex space-x-6 text-sm text-gray-600 border-t pt-2">
-                <button onClick={() => sendReaction(post._id, "like")} title={liked ? "You liked this" : "Like this post"} className={`${liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}`}>
-                  👍 Like ({post.likes?.length || 0})
+                <button onClick={() => sendReaction(post._id, "like")} title={liked ? "You liked this" : "Like this post"} className={liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}>
+                  Like ({post.likes?.length || 0})
                 </button>
 
-                <button onClick={() => sendReaction(post._id, "unlike")} title={unliked ? "You unliked this" : "Unlike this post"} className={`${unliked ? "text-red-600 font-bold" : "hover:text-red-600"}`}>
-                  👎 Unlike ({post.unlikes?.length || 0})
+                <button onClick={() => sendReaction(post._id, "unlike")} title={unliked ? "You unliked this" : "Unlike this post"} className={unliked ? "text-red-600 font-bold" : "hover:text-red-600"}>
+                  Unlike ({post.unlikes?.length || 0})
                 </button>
 
                 <button onClick={() => toggleComments(post._id)} className="hover:text-blue-600">
-                  💬 Comment ({post.comments?.length || 0})
+                  Comment ({post.comments?.length || 0})
                 </button>
               </div>
 
@@ -405,7 +496,15 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                     post.comments.map((c) => (
                       <div key={c._id} style={styles.commentRow}>
                         {c.user?.profilePic ? (
-                          <img src={resolveImageUrl(c.user.profilePic)} alt={c.user.username || "avatar"} style={styles.commentAvatar} onError={(e) => { e.target.onerror = null; e.target.src = ""; }} />
+                          <img
+                            src={resolveImageUrl(c.user.profilePic)}
+                            alt={c.user.username || "avatar"}
+                            style={styles.commentAvatar}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = "";
+                            }}
+                          />
                         ) : (
                           <div style={{ ...styles.commentAvatar, background: "#d1d5db", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
                             {initials(commenterDisplayName(c.user))}
@@ -416,17 +515,17 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ lineHeight: 1.05 }}>
                               <p style={{ margin: 0, fontWeight: 600 }}>{commenterDisplayName(c.user)}</p>
-                              <small style={{ margin: 0, color: "var(--text)" }}>{new Date(c.createdAt).toLocaleString()}</small>
+                              <small style={{ margin: 0, color: "var(--text)" }}>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}</small>
                             </div>
 
-                            <div style={{ marginLeft: "auto" }}>
-                              {isCommentOwner(c.user) && <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline">Delete</button>}
-                            </div>
+                            <div style={{ marginLeft: "auto" }}>{isCommentOwner(c.user) && <button onClick={() => handleDeleteComment(post._id, c._id)} className="text-xs text-red-500 hover:underline">Delete</button>}</div>
                           </div>
 
                           <div style={{ marginTop: 6 }}>
                             <div style={styles.commentBubble}>
-                              <p style={{ margin: 0 }} className="text-sm text-gray-800">{c.text}</p>
+                              <p style={{ margin: 0 }} className="text-sm text-gray-800">
+                                {c.text}
+                              </p>
                             </div>
                           </div>
 
@@ -452,7 +551,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                             {user?.profilePic ? (
                               <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} />
                             ) : (
-                              <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg,#10b981,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
+                              <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg, #10b981, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
                                 {initials(user?.username || "Me")}
                               </div>
                             )}
@@ -463,9 +562,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                               value={c.newReply || ""}
                               onChange={(e) =>
                                 setPosts((prev) =>
-                                  prev.map((p) =>
-                                    p._id === post._id ? { ...p, comments: p.comments.map((com) => (com._id === c._id ? { ...com, newReply: e.target.value } : com)) } : p
-                                  )
+                                  prev.map((p) => (p._id === post._id ? { ...p, comments: p.comments.map((com) => (com._id === c._id ? { ...com, newReply: e.target.value } : com)) } : p))
                                 )
                               }
                               className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
@@ -485,7 +582,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                     {user?.profilePic ? (
                       <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} />
                     ) : (
-                      <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg,#10b981,#06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
+                      <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg, #10b981, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
                         {initials(user?.username || "Me")}
                       </div>
                     )}

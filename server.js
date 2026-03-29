@@ -59,6 +59,9 @@ app.use("/api/posts", postRoutes);
 const userRoutes = require("./routes/user");
 app.use("/api/users", userRoutes);
 
+const newsRoutes = require("./routes/news");
+app.use("/api/news", newsRoutes);
+
 // --- Start server ---
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));

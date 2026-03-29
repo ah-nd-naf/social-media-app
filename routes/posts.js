@@ -22,8 +22,8 @@ router.post("/create", authMiddleware, async (req, res) => {
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    // Broadcast new post
-    io.emit("newPost", populatedPost);
+    // Broadcast new post once
+    if (io) io.emit("newPost", populatedPost);
 
     res.json(populatedPost);
   } catch (err) {
@@ -84,7 +84,7 @@ router.put("/like/:id", authMiddleware, async (req, res) => {
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    if (io) io.emit("updatePost", updatedPost);
 
     res.json(updatedPost);
   } catch (err) {
@@ -113,7 +113,7 @@ router.put("/unlike/:id", authMiddleware, async (req, res) => {
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    if (io) io.emit("updatePost", updatedPost);
 
     res.json(updatedPost);
   } catch (err) {
@@ -142,9 +142,11 @@ router.post("/comment/:id", authMiddleware, async (req, res) => {
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    // Emit a single update event
+    if (io) io.emit("updatePost", updatedPost);
 
-    return res.json(updatedPost.comments);
+    // Return the full updated post (frontend clears input and relies on socket)
+    return res.json(updatedPost);
   } catch (err) {
     console.error("POST /comment/:id error:", err);
     res.status(500).json({ error: err.message });
@@ -172,9 +174,9 @@ router.delete("/comment/:postId/:commentId", authMiddleware, async (req, res) =>
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    if (io) io.emit("updatePost", updatedPost);
 
-    res.json(updatedPost.comments);
+    res.json(updatedPost);
   } catch (err) {
     console.error("DELETE /comment/:postId/:commentId error:", err);
     res.status(500).json({ error: err.message });
@@ -196,7 +198,6 @@ router.post("/:postId/comment/:commentId/reply", authMiddleware, async (req, res
       createdAt: Date.now(),
     };
 
-    // Ensure replies array exists (schema should provide it)
     comment.replies = comment.replies || [];
     comment.replies.push(newReply);
     await post.save();
@@ -206,10 +207,10 @@ router.post("/:postId/comment/:commentId/reply", authMiddleware, async (req, res
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    if (io) io.emit("updatePost", updatedPost);
 
-    // return the replies for the comment
-    res.json(comment.replies);
+    // Return the full updated post
+    res.json(updatedPost);
   } catch (err) {
     console.error("POST /:postId/comment/:commentId/reply error:", err);
     res.status(500).json({ error: err.message });
@@ -240,9 +241,9 @@ router.delete("/:postId/comment/:commentId/reply/:replyId", authMiddleware, asyn
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
 
-    io.emit("updatePost", updatedPost);
+    if (io) io.emit("updatePost", updatedPost);
 
-    res.json(comment.replies);
+    res.json(updatedPost);
   } catch (err) {
     console.error("DELETE /:postId/comment/:commentId/reply/:replyId error:", err);
     res.status(500).json({ error: err.message });
