@@ -5,14 +5,18 @@ import Signup from "./Signup";
 import Home from "./Home";
 import ProtectedRoute from "./ProtectedRoute";
 import Profile from "./pages/Profile";
+import News from "./pages/News";
 
 function App() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fetch current user once on app load
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     fetch("http://localhost:5000/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -21,8 +25,13 @@ function App() {
         return r.json();
       })
       .then((data) => setUser(data))
-      .catch(() => setUser(null));
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
+
+  if (loading) {
+    return <div className="p-6 text-center">Loading...</div>;
+  }
 
   return (
     <Routes>
@@ -39,6 +48,14 @@ function App() {
       <Route
         path="/profile"
         element={<Profile initialUser={user} onUserUpdate={setUser} />}
+      />
+      <Route
+        path="/news"
+        element={
+          <ProtectedRoute>
+            <News />
+          </ProtectedRoute>
+        }
       />
     </Routes>
   );

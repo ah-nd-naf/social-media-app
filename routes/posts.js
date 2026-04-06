@@ -220,23 +220,26 @@ router.post("/:postId/comment/:commentId/reply", authMiddleware, async (req, res
 // Delete a reply
 router.delete("/:postId/comment/:commentId/reply/:replyId", authMiddleware, async (req, res) => {
   try {
-    const post = await Post.findById(req.params.postId);
+    const { postId, commentId, replyId } = req.params;
+    const post = await Post.findById(postId);
     if (!post) return res.status(404).json({ msg: "Post not found" });
 
-    const comment = post.comments.id(req.params.commentId);
+    const comment = post.comments.id(commentId);
     if (!comment) return res.status(404).json({ msg: "Comment not found" });
 
-    const reply = comment.replies.id(req.params.replyId);
+    const reply = comment.replies.id(replyId);
     if (!reply) return res.status(404).json({ msg: "Reply not found" });
 
-    if (reply.user.toString() !== req.user.id) {
+    if (!reply.user || reply.user.toString() !== req.user.id) {
       return res.status(401).json({ msg: "Not authorized to delete this reply" });
     }
 
-    reply.remove();
+    // Remove reply safely
+    comment.replies = comment.replies.filter(r => r._id.toString() !== replyId);
+
     await post.save();
 
-    const updatedPost = await Post.findById(req.params.postId)
+    const updatedPost = await Post.findById(postId)
       .populate("user", "username profilePic")
       .populate("comments.user", "username profilePic")
       .populate("comments.replies.user", "username profilePic");
@@ -249,5 +252,6 @@ router.delete("/:postId/comment/:commentId/reply/:replyId", authMiddleware, asyn
     res.status(500).json({ error: err.message });
   }
 });
+
 
 module.exports = router;

@@ -395,30 +395,16 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
           <Link to="/profile" className="text-sm text-gray-700 hover:underline">
             Profile
           </Link>
+          <Link to = "/news" className="text-sm text-gray-700 hover:underline">
+            Recent News
+          </Link>
           <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">
             Logout
           </button>
         </div>
       </div>
 
-      {/* Latest News */}
-      <section className="mb-6">
-        <h2 className="text-xl font-semibold mb-3">Latest News</h2>
-        <div className="space-y-3">
-          {news.length === 0 ? (
-            <p className="text-sm text-gray-500">Loading news...</p>
-          ) : (
-            news.map((n, i) => (
-              <div key={i} className="bg-gray-50 p-3 rounded-lg shadow-sm">
-                <a href={n.link} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
-                  {n.title}
-                </a>
-                <div className="text-xs text-gray-500 mt-1">{n.pubDate ? new Date(n.pubDate).toLocaleString() : ""}</div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+
 
       <form onSubmit={handleCreatePost} className="bg-white shadow-md rounded-lg p-4 mb-6">
         <textarea
