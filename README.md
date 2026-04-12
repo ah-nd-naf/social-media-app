@@ -18,9 +18,3 @@ cd backend
 npm install
 npm run dev
 
-### Frontend setup
-```bash
-cd frontend-vite
-npm install
-npm run dev
-
