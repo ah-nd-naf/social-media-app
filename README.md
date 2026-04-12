@@ -12,9 +12,14 @@ It supports authentication, posting, comments, likes/unlikes, profile management
 - Responsive UI styled with Tailwind CSS
 
 ## Setup Instructions
-### Backend
+**Backend**
 ```bash
 cd backend
 npm install
 npm run dev
 
+**Frontend**
+```bash
+cd frontend-vite
+npm install
+npm run dev
