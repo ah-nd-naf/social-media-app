@@ -14,12 +14,15 @@ A full-stack social media platform with user authentication, posting, commenting
 ## Setup Instructions
 
 **Backend**
-
 ```bash
 cd backend
 npm install
 npm run dev
+```
 
+**FrontEnd**
+```bash
 cd frontend-vite
 npm install
 npm run dev
+```
