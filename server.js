@@ -9,10 +9,10 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-// Allow requests from your frontend origin (adjust if needed)
+// Allow requests from your frontend origin
 app.use(cors({ origin: "http://localhost:5173", credentials: true }));
 
-// Serve uploaded files from /uploads
+// Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Test route
@@ -34,7 +34,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173", // your React dev server
+    origin: "http://localhost:5173",
     credentials: true,
   },
 });
@@ -46,7 +46,6 @@ io.on("connection", (socket) => {
   });
 });
 
-// Export io so routes can use it
 module.exports.io = io;
 
 // --- Routes ---

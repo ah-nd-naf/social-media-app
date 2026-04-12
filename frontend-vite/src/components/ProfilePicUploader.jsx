@@ -22,8 +22,14 @@ export default function ProfilePicUploader({ onUpdated }) {
     setLoading(true);
 
     const token = localStorage.getItem("token");
+    if (!token) {
+      alert("No auth token found. Please log in again.");
+      setLoading(false);
+      return;
+    }
+
     const fd = new FormData();
-    fd.append("profilePic", file);
+    fd.append("profilePic", file); // must match backend
 
     try {
       const res = await fetch("http://localhost:5000/api/users/upload-pic", {
@@ -32,22 +38,26 @@ export default function ProfilePicUploader({ onUpdated }) {
         body: fd,
       });
 
-      if (!res.ok) throw new Error("Upload failed");
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || "Upload failed");
+      }
+
       const data = await res.json();
       if (onUpdated) onUpdated(data);
 
       setFile(null);
       setPreview(null);
     } catch (err) {
-      console.error(err);
-      alert("Upload failed");
+      console.error("Upload error:", err);
+      alert("Upload failed: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex items-center gap-4 mt-4">
+    <form onSubmit={handleSubmit} className="flex items-center gap-6 mt-6">
       <label className="cursor-pointer flex items-center gap-3">
         <input
           type="file"
@@ -59,10 +69,10 @@ export default function ProfilePicUploader({ onUpdated }) {
           <img
             src={preview}
             alt="preview"
-            className="w-16 h-16 rounded-full object-cover border border-gray-300 shadow-sm"
+            className="w-24 h-24 rounded-full object-cover border border-gray-300 shadow-md"
           />
         ) : (
-          <div className="w-16 h-16 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-600">
+          <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-sm text-gray-600">
             Upload
           </div>
         )}
@@ -72,7 +82,11 @@ export default function ProfilePicUploader({ onUpdated }) {
       <button
         type="submit"
         disabled={loading || !file}
-        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
+        className={`px-5 py-2 rounded-lg font-semibold transition ${
+          loading || !file
+            ? "bg-gray-400 text-white cursor-not-allowed"
+            : "bg-blue-600 hover:bg-blue-700 text-white"
+        }`}
       >
         {loading ? "Uploading..." : "Save"}
       </button>

@@ -3,22 +3,28 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 
 const router = express.Router();
 
 /**
+ * Ensure upload folder exists
+ */
+const uploadDir = path.join(__dirname, "..", "uploads", "profile-pics");
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+/**
  * Multer setup for profile picture uploads
  */
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, path.join(__dirname, "..", "uploads"));
-  },
-  filename: function (req, file, cb) {
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => {
     const ext = path.extname(file.originalname);
-    const name = `${req.user ? req.user.id : "anon"}-${Date.now()}${ext}`;
-    cb(null, name);
+    cb(null, `${req.user.id}-${Date.now()}${ext}`);
   },
 });
 
@@ -37,7 +43,6 @@ const upload = multer({
 
 /**
  * Signup
- * Creates a new user and returns a token + user (without password)
  */
 router.post("/signup", async (req, res) => {
   const { username, email, password } = req.body;
@@ -50,9 +55,7 @@ router.post("/signup", async (req, res) => {
     await newUser.save();
 
     const token = jwt.sign({ id: newUser._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
-    const safeUser = await User.findById(newUser._id).select("-password");
-
-    res.json({ token, user: safeUser });
+    res.json({ token, user: await User.findById(newUser._id).select("-password") });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -60,7 +63,6 @@ router.post("/signup", async (req, res) => {
 
 /**
  * Login
- * Returns token and user (without password)
  */
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
@@ -72,9 +74,7 @@ router.post("/login", async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "1d" });
-    const safeUser = await User.findById(user._id).select("-password");
-
-    res.json({ token, user: safeUser });
+    res.json({ token, user: await User.findById(user._id).select("-password") });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -94,8 +94,6 @@ router.get("/me", authMiddleware, async (req, res) => {
 
 /**
  * Upload or update profile picture
- * Expects multipart/form-data with field name "profilePic"
- * Returns updated user (username + profilePic)
  */
 router.put(
   "/profile-pic",
@@ -105,8 +103,7 @@ router.put(
     try {
       if (!req.file) return res.status(400).json({ msg: "No file uploaded" });
 
-      // store the public path to the file
-      const profilePicPath = `/uploads/${req.file.filename}`;
+      const profilePicPath = `/uploads/profile-pics/${req.file.filename}`;
 
       const user = await User.findByIdAndUpdate(
         req.user.id,
