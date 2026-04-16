@@ -46,7 +46,7 @@ export default function Profile({ initialUser, onUserUpdate }) {
   const resolveImageUrl = (path) => {
     if (!path) return "";
     if (path.startsWith("http")) return path;
-    return `http://localhost:5000${path}`;
+    return `https://social-media-app-6wbl.onrender.com${path}`;
   };
 
   return (

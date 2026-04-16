@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { io } from "socket.io-client";
 
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL = "https://social-media-app-6wbl.onrender.com";
 const NEWS_API = `${BACKEND_URL}/api/news`;
 
 export default function Home({ user: propUser, setUser: setPropUser }) {

@@ -17,7 +17,7 @@ function App() {
       setLoading(false);
       return;
     }
-    fetch("http://localhost:5000/api/auth/me", {
+    fetch("https://social-media-app-6wbl.onrender.com/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => {

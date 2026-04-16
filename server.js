@@ -10,7 +10,10 @@ const app = express();
 app.use(express.json());
 
 // Allow requests from your frontend origin
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(cors({
+  origin: ["http://localhost:5173", "https://social-media-app.vercel.app"],
+  credentials: true
+}));
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
