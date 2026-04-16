@@ -41,10 +41,14 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://social-media-app-amber-eight-47.vercel.app"
+    ],
     credentials: true,
   },
 });
+
 
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
