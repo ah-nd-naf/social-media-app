@@ -18,16 +18,25 @@ function Login() {
         body: JSON.stringify({ email, password }),
       });
 
-      const data = await res.json();
+      // Safely parse JSON
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid server response");
+      }
 
       if (!res.ok) {
-        setError(data.message || "Login failed");
+        // Show backend error message if available
+        setError(data.message || `Login failed (status ${res.status})`);
       } else {
         localStorage.setItem("token", data.token);
+        alert("Login successful!");
         window.location.href = "/";
       }
     } catch (err) {
-      setError("Server error. Please try again.");
+      console.error("Login error:", err);
+      setError(err.message || "Server error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -47,6 +56,7 @@ function Login() {
           className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         />
 
         <input
@@ -55,6 +65,7 @@ function Login() {
           className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-blue-400"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
         />
 
         {error && <p className="text-red-500 text-sm">{error}</p>}

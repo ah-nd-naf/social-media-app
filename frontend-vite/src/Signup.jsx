@@ -19,16 +19,24 @@ function Signup() {
         body: JSON.stringify({ username, email, password }),
       });
 
-      const data = await res.json();
+      // Safely parse JSON
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error("Invalid server response");
+      }
 
       if (!res.ok) {
-        setError(data.message || "Signup failed");
+        // Show backend error message if available
+        setError(data.message || `Signup failed (status ${res.status})`);
       } else {
         alert("Signup successful! Please log in.");
         window.location.href = "/login";
       }
     } catch (err) {
-      setError("Server error. Please try again.");
+      console.error("Signup error:", err);
+      setError(err.message || "Server error. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -48,6 +56,7 @@ function Signup() {
           className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={username}
           onChange={(e) => setUsername(e.target.value)}
+          required
         />
 
         <input
@@ -56,6 +65,7 @@ function Signup() {
           className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          required
         />
 
         <input
@@ -64,6 +74,7 @@ function Signup() {
           className="border rounded-lg p-3 w-full focus:outline-none focus:ring-2 focus:ring-green-400"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          required
         />
 
         {error && <p className="text-red-500 text-sm">{error}</p>}
