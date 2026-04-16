@@ -1,9 +1,9 @@
 # Social Media App
 
-A full-stack social media application built with React (Vite) frontend and Node.js/Express + MongoDB backend.  
-It supports authentication, posting, comments, likes/unlikes, profile management, and real-time updates via Socket.IO.
+A full-stack social media platform with user authentication, posting, commenting, and real-time updates.
 
 ## Features
+
 - User signup/login with JWT authentication
 - Profile page with avatar upload
 - Create, like/unlike, and delete posts
@@ -12,14 +12,17 @@ It supports authentication, posting, comments, likes/unlikes, profile management
 - Responsive UI styled with Tailwind CSS
 
 ## Setup Instructions
+
 **Backend**
 ```bash
 cd backend
 npm install
 npm run dev
+```
 
-**Frontend**
+**FrontEnd**
 ```bash
 cd frontend-vite
 npm install
 npm run dev
+```
