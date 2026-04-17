@@ -10,7 +10,7 @@ export default function Profile({ initialUser, onUserUpdate }) {
     if (!user) {
       const token = localStorage.getItem("token");
       if (!token) return;
-      fetch("http://localhost:5000/api/users/me", {
+      fetch("https://social-media-app-6wbl.onrender.com/api/users/me", {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((r) => r.json())
@@ -31,7 +31,7 @@ export default function Profile({ initialUser, onUserUpdate }) {
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     const token = localStorage.getItem("token");
-    const res = await fetch("http://localhost:5000/api/users/update", {
+    const res = await fetch("https://social-media-app-6wbl.onrender.com/api/users/update", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
