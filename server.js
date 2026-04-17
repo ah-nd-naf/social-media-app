@@ -10,13 +10,19 @@ const app = express();
 app.use(express.json());
 
 // Allow requests from your frontend origin
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://social-media-app-amber-eight-47.vercel.app"
-  ],
-  credentials: true
-}));
+const allowedOrigin = (origin, callback) => {
+  // Allow requests with no origin (mobile apps, curl, etc.)
+  if (!origin) return callback(null, true);
+  if (
+    origin === "http://localhost:5173" ||
+    /https:\/\/social-media-app[\w-]*\.vercel\.app/.test(origin)
+  ) {
+    return callback(null, true);
+  }
+  return callback(new Error("Not allowed by CORS"));
+};
+
+app.use(cors({ origin: allowedOrigin, credentials: true }));
 
 
 // Serve uploaded files
@@ -40,13 +46,7 @@ const { Server } = require("socket.io");
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: {
-    origin: [
-      "http://localhost:5173",
-      "https://social-media-app-amber-eight-47.vercel.app"
-    ],
-    credentials: true,
-  },
+  cors: { origin: allowedOrigin, credentials: true },
 });
 
 

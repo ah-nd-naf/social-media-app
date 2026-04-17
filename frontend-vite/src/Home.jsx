@@ -204,21 +204,13 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         throw new Error(err.message || "Create failed");
       }
 
-      const newPost = await res.json();
-
-      // Avoid double-posting: only add locally if socket won't add it or if server doesn't emit
-      // Check if post already exists
-      const exists = posts.some((p) => (p._id || p.id) === (newPost._id || newPost.id));
-      if (!exists) {
-        setPosts((prev) => [normalizePost(newPost), ...prev]);
-      }
-
+      // Don't add locally — the backend emits a Socket.IO "newPost" event
+      // which the socket handler below picks up. Adding here too causes duplicates.
       setText("");
     } catch (err) {
       console.error("Create post error:", err);
       alert("Could not create post.");
     } finally {
-      // small delay to avoid accidental double clicks
       setTimeout(() => setIsSubmitting(false), 300);
     }
   };
