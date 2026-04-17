@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,7 +34,7 @@ function Login() {
       } else {
         localStorage.setItem("token", data.token);
         alert("Login successful!");
-        window.location.href = "/";
+        navigate("/");
       }
     } catch (err) {
       console.error("Login error:", err);
@@ -79,10 +81,10 @@ function Login() {
         </button>
 
         <p className="text-sm text-center text-gray-600">
-          Don’t have an account?{" "}
-          <a href="/signup" className="text-blue-500 hover:underline">
+          Don't have an account?{" "}
+          <Link to="/signup" className="text-blue-500 hover:underline">
             Sign up
-          </a>
+          </Link>
         </p>
       </form>
     </div>

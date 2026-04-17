@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 function Signup() {
   const [username, setUsername] = useState("");
@@ -6,6 +7,7 @@ function Signup() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -32,7 +34,7 @@ function Signup() {
         setError(data.message || `Signup failed (status ${res.status})`);
       } else {
         alert("Signup successful! Please log in.");
-        window.location.href = "/login";
+        navigate("/login");
       }
     } catch (err) {
       console.error("Signup error:", err);
@@ -89,9 +91,9 @@ function Signup() {
 
         <p className="text-sm text-center text-gray-600">
           Already have an account?{" "}
-          <a href="/login" className="text-green-500 hover:underline">
+          <Link to="/login" className="text-green-500 hover:underline">
             Log in
-          </a>
+          </Link>
         </p>
       </form>
     </div>
