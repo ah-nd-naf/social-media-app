@@ -179,7 +179,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
     try {
       await fetch(`${BACKEND_URL}/api/posts/${action}/${postId}`, {
-        method: "POST",
+        method: "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
     } catch (err) {
