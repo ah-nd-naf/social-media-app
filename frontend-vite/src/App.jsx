@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import Login from "./Login";
 import Signup from "./Signup";
 import Home from "./Home";
 import ProtectedRoute from "./ProtectedRoute";
 import Profile from "./pages/Profile";
 import News from "./pages/News";
+import { motion } from "framer-motion";
 
 function App() {
   const [user, setUser] = useState(null);
@@ -25,18 +26,32 @@ function App() {
         return r.json();
       })
       .then((data) => setUser(data))
-      .catch(() => setUser(null))
+      .catch(() => {
+        localStorage.removeItem("token");
+        setUser(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) {
-    return <div className="p-6 text-center">Loading...</div>;
+    return (
+      <div className="min-h-screen bg-deep flex items-center justify-center">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex flex-col items-center gap-4"
+        >
+          <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
+          <h1 className="text-2xl font-bold text-gradient animate-pulse">Socially</h1>
+        </motion.div>
+      </div>
+    );
   }
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} />
+      <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+      <Route path="/signup" element={user ? <Navigate to="/" /> : <Signup />} />
       <Route
         path="/"
         element={
@@ -47,7 +62,11 @@ function App() {
       />
       <Route
         path="/profile"
-        element={<Profile initialUser={user} onUserUpdate={setUser} />}
+        element={
+          <ProtectedRoute>
+            <Profile initialUser={user} onUserUpdate={setUser} />
+          </ProtectedRoute>
+        }
       />
       <Route
         path="/news"
@@ -62,3 +81,4 @@ function App() {
 }
 
 export default App;
+

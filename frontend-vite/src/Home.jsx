@@ -1,7 +1,19 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { io } from "socket.io-client";
-
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Heart, 
+  MessageCircle, 
+  Share2, 
+  LogOut, 
+  User as UserIcon, 
+  Newspaper, 
+  Send,
+  ThumbsDown,
+  Trash2,
+  MoreVertical
+} from "lucide-react";
 
 const BACKEND_URL = "https://social-media-app-6wbl.onrender.com";
 const NEWS_API = `${BACKEND_URL}/api/news`;
@@ -15,38 +27,6 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
   const navigate = useNavigate();
   const commentInputRefs = useRef({});
   const socketRef = useRef(null);
-
-  const AVATAR_SIZE = 40;
-  const COMMENT_AVATAR_SIZE = 32;
-
-  const styles = {
-    postAvatar: {
-      display: "block",
-      width: AVATAR_SIZE,
-      height: AVATAR_SIZE,
-      borderRadius: "50%",
-      objectFit: "cover",
-      margin: 0,
-      padding: 0,
-      flexShrink: 0,
-    },
-    commentAvatar: {
-      display: "block",
-      width: COMMENT_AVATAR_SIZE,
-      height: COMMENT_AVATAR_SIZE,
-      borderRadius: "50%",
-      objectFit: "cover",
-      margin: 0,
-      padding: 0,
-      flexShrink: 0,
-    },
-    avatarRow: { display: "flex", alignItems: "center", gap: 6, marginBottom: 12 },
-    commentRow: { display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12 },
-    nameBlock: { marginLeft: 0, lineHeight: 1.05 },
-    nameP: { margin: 0, lineHeight: 1.05, fontWeight: 600 },
-    nameSmall: { margin: 0, lineHeight: 1.05, color: "var(--text)" },
-    commentBubble: { background: "var(--code-bg, #f8fafc)", borderRadius: 10, padding: "8px 10px" },
-  };
 
   const resolveImageUrl = (path) => {
     if (!path) return "";
@@ -83,7 +63,6 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     return Array.from(map.values());
   };
 
-  // Keep propUser in sync and initial fetch
   useEffect(() => {
     if (propUser) setUser(propUser);
     else {
@@ -112,19 +91,11 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       .then((r) => r.json())
       .then((data) => setNews(Array.isArray(data) ? data : []))
       .catch(() => setNews([]));
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propUser]);
 
-  // Socket.IO connection (single, idempotent)
   useEffect(() => {
     socketRef.current = io(BACKEND_URL, { transports: ["websocket", "polling"] });
 
-    socketRef.current.on("connect", () => {
-      // connected
-    });
-
-    // Add new post only if not already present
     socketRef.current.on("newPost", (post) => {
       setPosts((prev) => {
         const id = post?._id || post?.id;
@@ -147,49 +118,20 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
     return () => {
       if (socketRef.current) {
-        socketRef.current.off("connect");
-        socketRef.current.off("newPost");
-        socketRef.current.off("updatePost");
         socketRef.current.disconnect();
-        socketRef.current = null;
       }
     };
   }, []);
 
   const initials = (name) => {
     if (!name) return "?";
-    return name
-      .toString()
-      .split(" ")
-      .map((s) => s[0])
-      .slice(0, 2)
-      .join("")
-      .toUpperCase();
+    return name.toString().split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
   };
 
-  const commenterDisplayName = (commentUser) => {
-    if (!commentUser) return "User";
-    if (typeof commentUser === "string") return commentUser.slice(0, 6);
-    if (commentUser.username) return commentUser.username;
-    if (commentUser.id) return commentUser._id?.toString().slice(0, 6) ?? commentUser.id.toString().slice(0, 6);
-    return "User";
-  };
-
-  const isCommentOwner = (commentUser) => {
-    if (!user) return false;
-    if (!commentUser) return false;
-    if (typeof commentUser === "string") return commentUser === user.id || commentUser === user._id;
-    if (commentUser.id) return commentUser.id.toString() === (user.id || user._id)?.toString();
-    if (commentUser._id) return commentUser._id.toString() === (user._id || user.id)?.toString();
-    return false;
-  };
-
-  // Create post (prevent double submissions)
   const handleCreatePost = async (e) => {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    if (isSubmitting) return;
+    if (e) e.preventDefault();
+    if (isSubmitting || !text.trim()) return;
     const token = localStorage.getItem("token");
-    if (!text.trim()) return;
 
     setIsSubmitting(true);
     try {
@@ -198,24 +140,14 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text }),
       });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Create failed" }));
-        throw new Error(err.message || "Create failed");
-      }
-
-      // Don't add locally — the backend emits a Socket.IO "newPost" event
-      // which the socket handler below picks up. Adding here too causes duplicates.
-      setText("");
+      if (res.ok) setText("");
     } catch (err) {
-      console.error("Create post error:", err);
-      alert("Could not create post.");
+      console.error(err);
     } finally {
       setTimeout(() => setIsSubmitting(false), 300);
     }
   };
 
-  // Reaction (like/unlike) with optimistic UI and reconciliation
   const sendReaction = async (postId, action) => {
     const token = localStorage.getItem("token");
     const meId = user?.id || user?._id;
@@ -223,10 +155,10 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     setPosts((prev) =>
       prev.map((p) => {
         if ((p._id || p.id) !== postId) return p;
-        const alreadyLiked = meId && Array.isArray(p.likes) && p.likes.some((id) => id.toString() === meId.toString());
-        const alreadyUnliked = meId && Array.isArray(p.unlikes) && p.unlikes.some((id) => id.toString() === meId.toString());
-        let likes = Array.isArray(p.likes) ? [...p.likes] : [];
-        let unlikes = Array.isArray(p.unlikes) ? [...p.unlikes] : [];
+        const alreadyLiked = meId && p.likes.some((id) => id.toString() === meId.toString());
+        const alreadyUnliked = meId && p.unlikes.some((id) => id.toString() === meId.toString());
+        let likes = [...p.likes];
+        let unlikes = [...p.unlikes];
 
         if (action === "like") {
           if (alreadyLiked) likes = likes.filter((id) => id.toString() !== meId.toString());
@@ -246,136 +178,47 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     );
 
     try {
-      const endpoints = [
-        { method: "PUT", url: `${BACKEND_URL}/api/posts/${action}/${postId}` },
-        { method: "POST", url: `${BACKEND_URL}/api/posts/${postId}/${action}` },
-        { method: "POST", url: `${BACKEND_URL}/api/posts/${action}/${postId}` },
-      ];
-      let updated = null;
-      for (const ep of endpoints) {
-        try {
-          const res = await fetch(ep.url, { method: ep.method, headers: { Authorization: `Bearer ${token}` } });
-          if (!res.ok) continue;
-          updated = await res.json();
-          break;
-        } catch {
-          continue;
-        }
-      }
-      if (updated && (updated._id || updated.id)) {
-        setPosts((prev) => prev.map((p) => ((p._id || p.id) === (updated._id || updated.id) ? normalizePost(updated) : p)));
-      } else {
-        const all = await fetch(`${BACKEND_URL}/api/posts`).then((r) => r.json());
-        setPosts((Array.isArray(all) ? all : []).map((p) => normalizePost(p)));
-      }
+      await fetch(`${BACKEND_URL}/api/posts/${action}/${postId}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
     } catch (err) {
       console.error(err);
-      fetch(`${BACKEND_URL}/api/posts`)
-        .then((r) => r.json())
-        .then((data) => setPosts((Array.isArray(data) ? data : []).map((p) => normalizePost(p))))
-        .catch(() => {});
     }
   };
 
   const toggleComments = (postId) => {
     setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, showComments: !p.showComments } : p)));
     setTimeout(() => {
-      const ref = commentInputRefs.current[postId];
-      if (ref && ref.focus) ref.focus();
+      commentInputRefs.current[postId]?.focus();
     }, 50);
   };
 
   const handleAddComment = async (e, postId) => {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
+    if (e) e.preventDefault();
     const token = localStorage.getItem("token");
     const post = posts.find((p) => p._id === postId);
     const commentText = (post?.newComment || "").trim();
     if (!commentText) return;
     try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/comment/${postId}`, {
+      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, newComment: "" } : p)));
+      await fetch(`${BACKEND_URL}/api/posts/comment/${postId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: commentText }),
       });
-
-      // Clear the input immediately; server will emit updatePost/newPost and socket handler will merge comments
-      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, newComment: "" } : p)));
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Add comment failed" }));
-        console.error("Add comment failed: ", err);
-      }
     } catch (err) {
-      console.error("Add comment error: ", err);
-    }
-  };
-
-  const handleAddReply = async (e, postId, commentId) => {
-    if (e && typeof e.preventDefault === "function") e.preventDefault();
-    const token = localStorage.getItem("token");
-    const post = posts.find((p) => p._id === postId);
-    const comment = post?.comments?.find((c) => c._id === commentId);
-    const replyText = (comment?.newReply || "").trim();
-    if (!replyText) return;
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/${postId}/comment/${commentId}/reply`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ text: replyText }),
-      });
-
-      setPosts((prev) =>
-        prev.map((p) =>
-          p._id === postId ? { ...p, comments: p.comments.map((c) => (c._id === commentId ? { ...c, newReply: "" } : c)) } : p
-        )
-      );
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Add reply failed" }));
-        console.error("Add reply failed: ", err);
-      }
-    } catch (err) {
-      console.error("Add reply error:", err);
+      console.error(err);
     }
   };
 
   const handleDeleteComment = async (postId, commentId) => {
     const token = localStorage.getItem("token");
     try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/comment/${postId}/${commentId}`, {
+      await fetch(`${BACKEND_URL}/api/posts/comment/${postId}/${commentId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error();
-      const updatedComments = await res.json();
-      if (Array.isArray(updatedComments)) {
-        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: updatedComments } : p)));
-      } else if (updatedComments && (updatedComments._id || updatedComments.id)) {
-        setPosts((prev) => prev.map((p) => (p._id === postId ? normalizePost(updatedComments) : p)));
-      } else {
-        const all = await fetch(`${BACKEND_URL}/api/posts`).then((r) => r.json());
-        setPosts((Array.isArray(all) ? all : []).map((p) => normalizePost(p)));
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDeleteReply = async (postId, commentId, replyId) => {
-    const token = localStorage.getItem("token");
-    try {
-      const res = await fetch(`${BACKEND_URL}/api/posts/${postId}/comment/${commentId}/reply/${replyId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error();
-      const updatedComment = await res.json();
-      if (updatedComment && (updatedComment._id || updatedComment.id)) {
-        setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, comments: p.comments.map((c) => (c._id === commentId ? updatedComment : c)) } : p)));
-      } else {
-        const all = await fetch(`${BACKEND_URL}/api/posts`).then((r) => r.json());
-        setPosts((Array.isArray(all) ? all : []).map((p) => normalizePost(p)));
-      }
     } catch (err) {
       console.error(err);
     }
@@ -383,203 +226,227 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
-    if (setUser) setUser(null);
-    if (setPropUser) setPropUser(null);
+    setPropUser(null);
     navigate("/login");
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-lg font-bold">{user ? `Welcome, ${user.username}` : "Welcome"}</h3>
-        <div className="flex items-center space-x-3">
-          <Link to="/profile" className="text-sm text-gray-700 hover:underline">
-            Profile
-          </Link>
-          <Link to="/news" className="text-sm text-gray-700 hover:underline">
-            Recent News
-          </Link>
-          <button onClick={handleLogout} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg font-semibold">
-            Logout
-          </button>
+    <div className="min-h-screen">
+      {/* Premium Glass Navbar */}
+      <nav className="glass-nav px-6 py-4">
+        <div className="max-w-4xl mx-auto flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gradient">Socially</h1>
+          <div className="flex items-center gap-6">
+            <Link to="/profile" className="flex items-center gap-2 hover:text-white transition-colors">
+              <UserIcon size={20} className="text-purple-400" />
+              <span className="hidden sm:inline font-medium">Profile</span>
+            </Link>
+            <Link to="/news" className="flex items-center gap-2 hover:text-white transition-colors">
+              <Newspaper size={20} className="text-cyan-400" />
+              <span className="hidden sm:inline font-medium">News</span>
+            </Link>
+            <button onClick={handleLogout} className="flex items-center gap-2 text-red-400 hover:text-red-300 transition-colors">
+              <LogOut size={20} />
+              <span className="hidden sm:inline font-medium">Logout</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </nav>
 
-      <form onSubmit={handleCreatePost} className="bg-white shadow-md rounded-lg p-4 mb-6">
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="What's on your mind?"
-          className="w-full p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 mb-3 resize-none"
-        />
-        <button type="submit" disabled={isSubmitting} className="bg-blue-500 hover:bg-blue-600 text-white px-5 py-2 rounded-lg font-semibold">
-          {isSubmitting ? "Sharing..." : "Share"}
-        </button>
-      </form>
+      <main className="max-w-2xl mx-auto p-6 space-y-8">
+        {/* Welcome Section */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex justify-between items-center"
+        >
+          <h2 className="text-2xl font-semibold">
+            Hello, <span className="text-purple-400">{user?.username || "Friend"}</span>!
+          </h2>
+        </motion.div>
 
-      <h2 className="text-xl font-semibold mb-4">Recent Posts</h2>
-
-      <div className="space-y-4">
-        {posts.map((post) => {
-          const liked = user && Array.isArray(post.likes) && post.likes.some((id) => id.toString() === (user._id || user.id)?.toString());
-          const unliked = user && Array.isArray(post.unlikes) && post.unlikes.some((id) => id.toString() === (user._id || user.id)?.toString());
-
-          return (
-            <div key={post._id || post.id} className="bg-white shadow-md rounded-lg p-4 border border-gray-100">
-              <div style={styles.avatarRow}>
-                {post.user?.profilePic ? (
-                  <img
-                    src={resolveImageUrl(post.user.profilePic)}
-                    alt={post.user.username || "avatar"}
-                    style={styles.postAvatar}
-                    onError={(e) => {
-                      e.target.onerror = null;
-                      e.target.src = "";
-                    }}
-                  />
-                ) : (
-                  <div
-                    style={{
-                      ...styles.postAvatar,
-                      background: "linear-gradient(90deg, #60a5fa, #8b5cf6)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      fontWeight: 700,
-                    }}
-                  >
-                    {initials(post.user?.username || post.user?._id || "U")}
-                  </div>
-                )}
-                <div style={styles.nameBlock}>
-                  <p style={styles.nameP}>{post.user?.username || (post.user?._id ? post.user._id.toString().slice(0, 6) : "Unknown")}</p>
-                  <small style={styles.nameSmall}>{post.createdAt ? new Date(post.createdAt).toLocaleString() : ""}</small>
+        {/* Create Post Card */}
+        <motion.form 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          onSubmit={handleCreatePost} 
+          className="glass-card p-6 rounded-2xl relative overflow-hidden"
+        >
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-500 to-cyan-500 opacity-50" />
+          <div className="flex gap-4">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold shrink-0">
+              {user?.profilePic ? (
+                <img src={resolveImageUrl(user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
+              ) : initials(user?.username)}
+            </div>
+            <div className="flex-1 space-y-4">
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="What's on your mind?"
+                className="w-full bg-transparent border-none focus:ring-0 text-lg resize-none placeholder:text-slate-500"
+                rows="3"
+              />
+              <div className="flex justify-between items-center pt-2">
+                <div className="flex gap-2">
+                  {/* Additional post options could go here */}
                 </div>
-              </div>
-
-              <p className="text-gray-800 mb-3">{post.text}</p>
-
-              <div className="flex space-x-6 text-sm text-gray-600 border-t pt-2">
-                <button onClick={() => sendReaction(post._id || post.id, "like")} title={liked ? "You liked this" : "Like this post"} className={liked ? "text-blue-600 font-bold" : "hover:text-blue-600"}>
-                  Like ({post.likes?.length || 0})
-                </button>
-
-                <button onClick={() => sendReaction(post._id || post.id, "unlike")} title={unliked ? "You unliked this" : "Unlike this post"} className={unliked ? "text-red-600 font-bold" : "hover:text-red-600"}>
-                  Unlike ({post.unlikes?.length || 0})
-                </button>
-
-                <button onClick={() => toggleComments(post._id || post.id)} className="hover:text-blue-600">
-                  Comment ({post.comments?.length || 0})
+                <button 
+                  type="submit" 
+                  disabled={isSubmitting} 
+                  className="btn-primary px-6 py-2 rounded-xl flex items-center gap-2 font-semibold disabled:opacity-50"
+                >
+                  <Send size={18} />
+                  {isSubmitting ? "Sharing..." : "Share Post"}
                 </button>
               </div>
+            </div>
+          </div>
+        </motion.form>
 
-              {post.showComments && (
-                <div className="mt-4">
-                  {post.comments?.length ? (
-                    post.comments.map((c) => (
-                      <div key={c._id || c.id} style={styles.commentRow}>
-                        {c.user?.profilePic ? (
-                          <img src={resolveImageUrl(c.user.profilePic)} alt={c.user.username || "avatar"} style={styles.commentAvatar} onError={(e) => { e.target.onerror = null; e.target.src = ""; }} />
-                        ) : (
-                          <div style={{ ...styles.commentAvatar, background: "#d1d5db", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700 }}>
-                            {initials(commenterDisplayName(c.user))}
-                          </div>
-                        )}
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ lineHeight: 1.05 }}>
-                              <p style={{ margin: 0, fontWeight: 600 }}>{commenterDisplayName(c.user)}</p>
-                              <small style={{ margin: 0, color: "var(--text)" }}>{c.createdAt ? new Date(c.createdAt).toLocaleString() : ""}</small>
-                            </div>
-                            <div style={{ marginLeft: "auto" }}>{isCommentOwner(c.user) && <button onClick={() => handleDeleteComment(post._id || post.id, c._id || c.id)} className="text-xs text-red-500 hover:underline">Delete</button>}</div>
-                          </div>
-                          <div style={{ marginTop: 6 }}>
-                            <div style={styles.commentBubble}>
-                              <p style={{ margin: 0 }} className="text-sm text-gray-800">{c.text}</p>
-                            </div>
-                          </div>
+        {/* Posts Feed */}
+        <div className="space-y-6">
+          <h3 className="text-xl font-medium text-slate-400">Recent Activity</h3>
+          <AnimatePresence mode="popLayout">
+            {posts.map((post, index) => {
+              const liked = user && post.likes.some((id) => id.toString() === (user._id || user.id)?.toString());
+              const unliked = user && post.unlikes.some((id) => id.toString() === (user._id || user.id)?.toString());
 
-                          {c.replies?.length > 0 && (
-                            <div className="mt-2 ml-10 space-y-2">
-                              {c.replies.map((r) => (
-                                <div key={r._id || r.id} className="text-sm text-gray-700">
-                                  <span className="font-semibold mr-2">{r.user?.username || (typeof r.user === "string" ? r.user.slice(0, 6) : "User")}</span>
-                                  <span className="text-gray-600">{r.text}</span>
-                                  {isCommentOwner(r.user) && (
-                                    <button onClick={() => handleDeleteReply(post._id || post.id, c._id || c.id, r._id || r.id)} className="ml-3 text-xs text-red-500 hover:underline">
-                                      Delete
+              return (
+                <motion.div
+                  key={post._id || post.id}
+                  layout
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="glass-card rounded-2xl p-6"
+                >
+                  {/* Post Header */}
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="flex gap-3 items-center">
+                      <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-white font-semibold">
+                        {post.user?.profilePic ? (
+                          <img src={resolveImageUrl(post.user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
+                        ) : initials(post.user?.username)}
+                      </div>
+                      <div>
+                        <h4 className="font-semibold text-slate-200">
+                          {post.user?.username || "Anonymous"}
+                        </h4>
+                        <span className="text-xs text-slate-500">
+                          {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : "Just now"}
+                        </span>
+                      </div>
+                    </div>
+                    <button className="text-slate-500 hover:text-white">
+                      <MoreVertical size={20} />
+                    </button>
+                  </div>
+
+                  {/* Post Content */}
+                  <p className="text-slate-300 text-lg leading-relaxed mb-6">
+                    {post.text}
+                  </p>
+
+                  {/* Post Actions */}
+                  <div className="flex items-center gap-6 pt-4 border-t border-white/5">
+                    <button 
+                      onClick={() => sendReaction(post._id || post.id, "like")}
+                      className={`flex items-center gap-2 transition-all ${liked ? 'text-purple-400 scale-110' : 'text-slate-400 hover:text-purple-400'}`}
+                    >
+                      <Heart size={20} fill={liked ? "currentColor" : "none"} />
+                      <span className="text-sm font-medium">{post.likes?.length || 0}</span>
+                    </button>
+
+                    <button 
+                      onClick={() => sendReaction(post._id || post.id, "unlike")}
+                      className={`flex items-center gap-2 transition-all ${unliked ? 'text-cyan-400 scale-110' : 'text-slate-400 hover:text-cyan-400'}`}
+                    >
+                      <ThumbsDown size={20} fill={unliked ? "currentColor" : "none"} />
+                      <span className="text-sm font-medium">{post.unlikes?.length || 0}</span>
+                    </button>
+
+                    <button 
+                      onClick={() => toggleComments(post._id || post.id)}
+                      className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors"
+                    >
+                      <MessageCircle size={20} />
+                      <span className="text-sm font-medium">{post.comments?.length || 0}</span>
+                    </button>
+
+                    <button className="flex items-center gap-2 text-slate-400 hover:text-white transition-colors ml-auto">
+                      <Share2 size={20} />
+                    </button>
+                  </div>
+
+                  {/* Comments Section */}
+                  <AnimatePresence>
+                    {post.showComments && (
+                      <motion.div 
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="mt-6 pt-6 border-t border-white/5 space-y-4 overflow-hidden"
+                      >
+                        {/* Comment List */}
+                        <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                          {post.comments.map((c) => (
+                            <div key={c._id || c.id} className="flex gap-3">
+                              <div className="w-8 h-8 rounded-full bg-slate-700 shrink-0 flex items-center justify-center text-xs font-bold">
+                                {c.user?.profilePic ? (
+                                  <img src={resolveImageUrl(c.user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
+                                ) : initials(c.user?.username || "U")}
+                              </div>
+                              <div className="flex-1 bg-white/5 rounded-2xl px-4 py-2 relative group">
+                                <div className="flex justify-between items-center mb-1">
+                                  <span className="text-sm font-semibold text-purple-300">
+                                    {c.user?.username || "User"}
+                                  </span>
+                                  {(c.user?._id === user?._id || c.user?.id === user?._id) && (
+                                    <button 
+                                      onClick={() => handleDeleteComment(post._id || post.id, c._id || c.id)}
+                                      className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                      <Trash2 size={14} />
                                     </button>
                                   )}
                                 </div>
-                              ))}
-                            </div>
-                          )}
-
-                          <form onSubmit={(e) => handleAddReply(e, post._id || post.id, c._id || c.id)} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                            {user?.profilePic ? (
-                              <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} />
-                            ) : (
-                              <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg, #10b981, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
-                                {initials(user?.username || "Me")}
+                                <p className="text-sm text-slate-300">{c.text}</p>
                               </div>
-                            )}
-
-                            <input
-                              type="text"
-                              placeholder="Write a reply ..."
-                              value={c.newReply || ""}
-                              onChange={(e) =>
-                                setPosts((prev) =>
-                                  prev.map((p) =>
-                                    (p._id || p.id) === (post._id || post.id)
-                                      ? { ...p, comments: p.comments.map((com) => (com._id === c._id ? { ...com, newReply: e.target.value } : com)) }
-                                      : p
-                                  )
-                                )
-                              }
-                              className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                            />
-                            <button type="submit" className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">
-                              Reply
-                            </button>
-                          </form>
+                            </div>
+                          ))}
                         </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-gray-500 mb-2">No comments yet. Be the first to comment.</p>
-                  )}
 
-                  <form onSubmit={(e) => handleAddComment(e, post._id || post.id)} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    {user?.profilePic ? (
-                      <img src={resolveImageUrl(user.profilePic)} alt={user.username || "me"} style={styles.commentAvatar} />
-                    ) : (
-                      <div style={{ ...styles.commentAvatar, background: "linear-gradient(90deg, #10b981, #06b6d4)", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 700 }}>
-                        {initials(user?.username || "Me")}
-                      </div>
+                        {/* Comment Input */}
+                        <form 
+                          onSubmit={(e) => handleAddComment(e, post._id || post.id)}
+                          className="flex gap-2 items-center"
+                        >
+                          <input
+                            ref={(el) => (commentInputRefs.current[post._id || post.id] = el)}
+                            type="text"
+                            placeholder="Write a comment..."
+                            value={post.newComment || ""}
+                            onChange={(e) =>
+                              setPosts((prev) => prev.map((p) => ((p._id || p.id) === post._id ? { ...p, newComment: e.target.value } : p)))
+                            }
+                            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:ring-1 focus:ring-purple-500 outline-none"
+                          />
+                          <button type="submit" className="text-purple-400 hover:text-purple-300">
+                            <Send size={20} />
+                          </button>
+                        </form>
+                      </motion.div>
                     )}
-
-                    <input
-                      ref={(el) => (commentInputRefs.current[post._id || post.id] = el)}
-                      type="text"
-                      placeholder="Write a comment ..."
-                      value={post.newComment || ""}
-                      onChange={(e) =>
-                        setPosts((prev) => prev.map((p) => ((p._id || p.id) === (post._id || post.id) ? { ...p, newComment: e.target.value } : p)))
-                      }
-                      className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-                    />
-                    <button type="submit" className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm">
-                      Post
-                    </button>
-                  </form>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </div>
+      </main>
     </div>
   );
 }
+
