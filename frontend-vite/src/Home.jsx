@@ -34,7 +34,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     return `${BACKEND_URL}${path}`;
   };
 
-  const normalizePost = (p) => ({
+  const normalizePost = (p, existingPost = null) => ({
     ...p,
     user:
       p.user ||
@@ -49,8 +49,9 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     likes: Array.isArray(p.likes) ? p.likes : [],
     unlikes: Array.isArray(p.unlikes) ? p.unlikes : [],
     comments: Array.isArray(p.comments) ? p.comments : [],
-    newComment: p.newComment ?? "",
-    showComments: p.showComments ?? false,
+    newComment: existingPost?.newComment ?? p.newComment ?? "",
+    showComments: existingPost?.showComments ?? p.showComments ?? false,
+    replyingTo: existingPost?.replyingTo ?? p.replyingTo ?? null,
   });
 
   const dedupeById = (arr = []) => {
@@ -109,9 +110,8 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
       setPosts((prev) =>
         prev.map((p) => {
           if ((p._id || p.id) !== (updatedPost._id || updatedPost.id)) return p;
-          const mergedComments = dedupeById([...(p.comments || []), ...(updatedPost.comments || [])]);
-          const merged = { ...p, ...updatedPost, comments: mergedComments };
-          return normalizePost(merged);
+          // Use updatedPost as base but preserve local UI state from existing post 'p'
+          return normalizePost(updatedPost, p);
         })
       );
     });
@@ -212,10 +212,43 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     }
   };
 
+  const handleAddReply = async (e, postId, commentId) => {
+    if (e) e.preventDefault();
+    const token = localStorage.getItem("token");
+    const post = posts.find((p) => p._id === postId);
+    const replyText = (post?.replyingTo?.commentId === commentId ? post.replyingTo.text : "").trim();
+    if (!replyText) return;
+
+    try {
+      // Clear reply state
+      setPosts((prev) => prev.map((p) => (p._id === postId ? { ...p, replyingTo: null } : p)));
+
+      await fetch(`${BACKEND_URL}/api/posts/${postId}/comment/${commentId}/reply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ text: replyText }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleDeleteComment = async (postId, commentId) => {
     const token = localStorage.getItem("token");
     try {
       await fetch(`${BACKEND_URL}/api/posts/comment/${postId}/${commentId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteReply = async (postId, commentId, replyId) => {
+    const token = localStorage.getItem("token");
+    try {
+      await fetch(`${BACKEND_URL}/api/posts/${postId}/comment/${commentId}/reply/${replyId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -390,29 +423,110 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                         className="mt-6 pt-6 border-t border-white/5 space-y-4 overflow-hidden"
                       >
                         {/* Comment List */}
-                        <div className="space-y-4 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="space-y-6 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                           {post.comments.map((c) => (
-                            <div key={c._id || c.id} className="flex gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-700 shrink-0 flex items-center justify-center text-xs font-bold">
-                                {c.user?.profilePic ? (
-                                  <img src={resolveImageUrl(c.user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
-                                ) : initials(c.user?.username || "U")}
-                              </div>
-                              <div className="flex-1 bg-white/5 rounded-2xl px-4 py-2 relative group">
-                                <div className="flex justify-between items-center mb-1">
-                                  <span className="text-sm font-semibold text-purple-300">
-                                    {c.user?.username || "User"}
-                                  </span>
-                                  {(c.user?._id === user?._id || c.user?.id === user?._id) && (
+                            <div key={c._id || c.id} className="space-y-3">
+                              <div className="flex gap-3 group">
+                                <div className="w-8 h-8 rounded-full bg-slate-700 shrink-0 flex items-center justify-center text-xs font-bold">
+                                  {c.user?.profilePic ? (
+                                    <img src={resolveImageUrl(c.user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
+                                  ) : initials(c.user?.username || "U")}
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                  <div className="bg-white/5 rounded-2xl px-4 py-2 relative group-hover:bg-white/[0.08] transition-colors">
+                                    <div className="flex justify-between items-center mb-1">
+                                      <span className="text-sm font-semibold text-purple-300">
+                                        {c.user?.username || "User"}
+                                      </span>
+                                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {(c.user?._id === user?._id || c.user?.id === user?._id) && (
+                                          <button 
+                                            onClick={() => handleDeleteComment(post._id || post.id, c._id || c.id)}
+                                            className="text-slate-500 hover:text-red-400"
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <p className="text-sm text-slate-300 leading-relaxed">{c.text}</p>
+                                  </div>
+                                  
+                                  {/* Reply Actions */}
+                                  <div className="flex gap-4 ml-2 items-center">
                                     <button 
-                                      onClick={() => handleDeleteComment(post._id || post.id, c._id || c.id)}
-                                      className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      onClick={() => setPosts((prev) => prev.map((p) => p._id === post._id ? { ...p, replyingTo: { commentId: c._id, text: "" } } : p))}
+                                      className="text-[11px] font-bold text-slate-500 hover:text-purple-400 uppercase tracking-wider"
                                     >
-                                      <Trash2 size={14} />
+                                      Reply
                                     </button>
+                                    <span className="text-[10px] text-slate-600">
+                                      {c.createdAt ? new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                                    </span>
+                                  </div>
+
+                                  {/* Nested Replies */}
+                                  {c.replies && c.replies.length > 0 && (
+                                    <div className="mt-3 ml-2 pl-4 border-l-2 border-white/5 space-y-3">
+                                      {c.replies.map((reply) => (
+                                        <div key={reply._id || reply.id} className="flex gap-2 group/reply">
+                                          <div className="w-6 h-6 rounded-full bg-slate-800 shrink-0 flex items-center justify-center text-[10px] font-bold">
+                                            {reply.user?.profilePic ? (
+                                              <img src={resolveImageUrl(reply.user.profilePic)} className="w-full h-full rounded-full object-cover" alt="" />
+                                            ) : initials(reply.user?.username || "R")}
+                                          </div>
+                                          <div className="flex-1 bg-white/[0.03] rounded-xl px-3 py-1.5 relative group-hover/reply:bg-white/[0.05] transition-colors">
+                                            <div className="flex justify-between items-center mb-0.5">
+                                              <span className="text-xs font-semibold text-cyan-400">
+                                                {reply.user?.username || "Replier"}
+                                              </span>
+                                              {(reply.user?._id === user?._id || reply.user?.id === user?._id) && (
+                                                <button 
+                                                  onClick={() => handleDeleteReply(post._id || post.id, c._id || c.id, reply._id || reply.id)}
+                                                  className="text-slate-600 hover:text-red-400 opacity-0 group-hover/reply:opacity-100 transition-opacity"
+                                                >
+                                                  <Trash2 size={12} />
+                                                </button>
+                                              )}
+                                            </div>
+                                            <p className="text-xs text-slate-300">{reply.text}</p>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Reply Input Form */}
+                                  {post.replyingTo?.commentId === c._id && (
+                                    <motion.form 
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      onSubmit={(e) => handleAddReply(e, post._id || post.id, c._id || c.id)}
+                                      className="flex gap-2 items-center mt-2 ml-2"
+                                    >
+                                      <input
+                                        autoFocus
+                                        type="text"
+                                        placeholder="Write a reply..."
+                                        value={post.replyingTo.text}
+                                        onChange={(e) =>
+                                          setPosts((prev) => prev.map((p) => p._id === post._id ? { ...p, replyingTo: { ...p.replyingTo, text: e.target.value } } : p))
+                                        }
+                                        className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-purple-500 outline-none"
+                                      />
+                                      <button type="submit" className="text-purple-400 hover:text-purple-300">
+                                        <Send size={16} />
+                                      </button>
+                                      <button 
+                                        type="button" 
+                                        onClick={() => setPosts((prev) => prev.map((p) => p._id === post._id ? { ...p, replyingTo: null } : p))}
+                                        className="text-slate-500 hover:text-white text-xs"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </motion.form>
                                   )}
                                 </div>
-                                <p className="text-sm text-slate-300">{c.text}</p>
                               </div>
                             </div>
                           ))}
@@ -421,7 +535,7 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
                         {/* Comment Input */}
                         <form 
                           onSubmit={(e) => handleAddComment(e, post._id || post.id)}
-                          className="flex gap-2 items-center"
+                          className="flex gap-2 items-center pt-2"
                         >
                           <input
                             ref={(el) => (commentInputRefs.current[post._id || post.id] = el)}
@@ -449,4 +563,5 @@ export default function Home({ user: propUser, setUser: setPropUser }) {
     </div>
   );
 }
+
 
